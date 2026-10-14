@@ -338,7 +338,7 @@ kbd { font: 600 11px var(--n-font); padding: 3px 8px; border-radius: 7px; backgr
 body.locked .sheet, body.pomo .sheet { transform: translateY(104%); }
 body.focus:not(.pomo) .sheet { transform: translateY(calc(100% - 46px)); }
 body.locked .sheet-in, body.focus .sheet-in, body.pomo .sheet-in { opacity: 0; pointer-events: none; }
-body.vivid .fog { opacity: 1; }
+body.vivid .fog { opacity: 1; filter: saturate(1.4) brightness(1.35); }
 /* Griff am oberen Rand der Flaeche: ein Klick oder Ziehen nach unten faehrt sie herunter (Fokus), im Fokus-Modus wieder hoch */
 .grab { position: absolute; z-index: 6; top: 0; left: 50%; translate: -50% 0; width: 120px; height: 24px; cursor: grab; touch-action: none; }
 .grab::before { content: ""; position: absolute; left: 50%; top: 8px; translate: -50% 0; width: 44px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.2); transition: width 0.3s var(--n-spring), background 0.2s; }
