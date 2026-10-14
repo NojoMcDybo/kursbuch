@@ -79,7 +79,9 @@ fn clipboard_file(paths: &Paths, course: i64, cmid: i64, idx: usize) -> Result<(
     let c = data::course(&s, course)?;
     let rel = c.cms.get(&cmid.to_string()).ok_or("Aktivität nicht gefunden.")?.files.get(idx).ok_or("Datei nicht gefunden.")?;
     let file = open::resolve(&data::ziel(paths)?, rel)?;
-    let st = Command::new("powershell.exe")
+    // vollstaendiger Pfad: ein `powershell.exe` im Programmordner oder im PATH wuerde sonst vorgehen
+    let ps = std::env::var_os("SystemRoot").map(|r| std::path::PathBuf::from(r).join(r"System32\WindowsPowerShell\v1.0\powershell.exe")).filter(|p| p.is_file()).unwrap_or_else(|| "powershell.exe".into());
+    let st = Command::new(ps)
         .args(["-NoProfile", "-NonInteractive", "-Command", "Set-Clipboard -LiteralPath $env:KURSBUCH_COPY"])
         .env("KURSBUCH_COPY", &file)
         .stdin(Stdio::null())

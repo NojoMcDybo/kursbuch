@@ -67,7 +67,8 @@ export type SyncEvent = { event: string; courses?: number; index?: number; total
 export type Plans = Record<string, Entry[]>;
 export type Imported = { entries: Entry[]; skipped: number };
 /** LearnWeb-Anmeldung: gespeichert (Kennung) und ob gerade ein Sync laeuft */
-export type Account = { saved: boolean; user: string | null; running: boolean };
+/** session: angemeldet ohne gespeichertes Passwort (nur bis zum Abmelden oder Beenden) */
+export type Account = { saved: boolean; user: string | null; running: boolean; session?: boolean };
 
 /** Fokus: To-do-Listen, Pomodoro-Einstellungen (Minuten) und Lernstreaks (Rust: focus.rs) */
 export type Todo = { id: string; text: string; done: boolean };
@@ -118,7 +119,7 @@ export const api = {
   /** schreibt .ics in „Downloads“ und zeigt sie im Explorer; Rueckgabe: Pfad. from/to als JJJJ-MM-TT */
   timetableExport: (semester: string, from: string, to: string) => invoke<string>("timetable_export", { semester, from, to }),
   accountStatus: () => invoke<Account>("account_status"),
-  accountLogin: (user: string, password: string) => invoke<void>("account_login", { user, password }),
+  accountLogin: (user: string, password: string, save: boolean) => invoke<void>("account_login", { user, password, save }),
   accountLogout: () => invoke<void>("account_logout"),
   focusGet: () => invoke<Focus>("focus_get"),
   focusSave: (lists: TodoList[], settings: FocusSettings) => invoke<void>("focus_save", { lists, settings }),

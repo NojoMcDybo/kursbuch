@@ -148,7 +148,9 @@ pub fn course_extras(paths: State<Paths>, course: i64) -> Result<Extras, String>
 /// Nur http(s) und mailto, nie ein Pfad oder Programm; der Nutzer hat den Verweis angeklickt
 pub fn external_ok(url: &str) -> bool {
     let l = url.to_ascii_lowercase();
-    url.len() <= 800 && !url.chars().any(char::is_control) && (l.starts_with("https://") || l.starts_with("http://") || l.starts_with("mailto:"))
+    // `mailto:…?attach=` haengt in manchen Mailprogrammen eine lokale Datei oder Netzfreigabe an: nicht durchlassen
+    let mail = l.starts_with("mailto:") && !l.contains("attach");
+    url.len() <= 800 && !url.chars().any(char::is_control) && (l.starts_with("https://") || l.starts_with("http://") || mail)
 }
 
 #[tauri::command]
@@ -169,7 +171,7 @@ mod tests {
         for ok in ["https://teams.microsoft.com/l/x", "http://a.de", "mailto:a@b.de", "HTTPS://A.DE"] {
             assert!(external_ok(ok), "{ok}");
         }
-        for bad in ["", "file:///C:/Windows/notepad.exe", "C:\\x.exe", "javascript:alert(1)", "ftp://x", "https://a.de/\n", "data:text/html,x", &format!("https://{}", "a".repeat(800))] {
+        for bad in ["", "file:///C:/Windows/notepad.exe", "C:\\x.exe", "javascript:alert(1)", "ftp://x", "mailto:a@b.de?attach=C:\\Users\\x\\geheim.txt", "MAILTO:a@b.de?Attachment=\\\\host\\share\\x", "https://a.de/\n", "data:text/html,x", &format!("https://{}", "a".repeat(800))] {
             assert!(!external_ok(bad), "{bad:?}");
         }
     }

@@ -22,8 +22,9 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
 
 - **Konto** (`account.ts`, `account.rs`): Kreis oben links, Punkt = Sync-Stand (grün aktuell, gelb lange her, grau nicht angemeldet).
   Ohne Anmeldung ein Formular (Kennung, Passwort), sonst Kennung, letzter Sync und „Abmelden“. Das Passwort geht einmal per
-  stdin an `learnweb.cli login`, das es bei LearnWeb prüft und im Windows-Tresor ablegt; die App behält nichts (das Feld wird
-  sofort geleert), die Kennung wird geprüft (kein führendes Minus, keine Leerzeichen).
+  stdin an `learnweb.cli login`, das es bei LearnWeb prüft und im Windows-Tresor ablegt; das Feld wird sofort geleert. Mit dem Haken
+  **„Passwort speichern“** (Vorgabe) bleibt es im Tresor; ohne Haken prüft Kursbuch es nur und hält es bis zum Abmelden oder Beenden im
+  Speicher (Syncs bekommen es per stdin, `--password-stdin`); der Tresor, der geplante Sync und der MCP-Server bleiben unberührt, die Kennung wird geprüft (kein führendes Minus, keine Leerzeichen).
 - **Semester** (`main.ts`): die zwei neuesten als Segmente, ältere hinter „…“ (dort steht dann der gewählte Name).
 - **Suche**: Lupe oder Strg+K; das Fenster wächst aus der Lupe in die Mitte (Liquid Glass, Feld als Pille ohne eigene Farbe) und
   schließt sich in sie. Details unten.
@@ -159,4 +160,5 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Umbau 2 (2026-10-14): Leiste + große matte Fläche, Liquid Glass nur für Knöpfe, Stundenplan (schreiben, .ics importieren/exportieren), Kurse in eigenen Fenstern, Konto-Anmeldung, Suchfenster aus der Lupe.
 - Umbau 3: Pomodoro-Widget, Beige-Hintergrund, Nunito Sans, Selbst-Update (v0.2.0), Inhalte ohne Datei im Kursfenster.
 - Umbau 4 (v0.3.0): Stundenplan und Wochenkalender in einem, automatische Erkennung von Kursen, Farben, Wochentagen und Zeiten, Abgleich aus der App mit Fortschritt, Widget ausblendbar, ruhigere Abstände und Animationen.
+- v0.3.1: Sicherheitsprüfung (`docs/sicherheitspruefung-0.3.0.md`): Content-Security-Policy, „Passwort speichern“ (Haken im Anmeldeformular), Gerätenamen, `mailto:`.
 - Phase 5: KI (Laya): Termine und Fristen aus Folien als Vorschläge. Phase 6: Sync aus der App, Einstellungen, Installer.

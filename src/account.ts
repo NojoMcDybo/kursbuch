@@ -9,7 +9,9 @@ import { api, type Account as Status, type Upd } from "./api";
 import { ago } from "./dates";
 import { el, ico, iconBtn, leave, message, toast } from "./ui";
 
-/** Anmeldeformular (Kennung, Passwort): im Konto-Menue und auf dem Anmeldebild. `onDone` nach geglueckter Anmeldung. */
+const KEY_SAVE = "kursbuch-save-pw";
+
+/** Anmeldeformular (Kennung, Passwort, „Passwort speichern“): im Konto-Menue und auf dem Anmeldebild. `onDone` nach geglueckter Anmeldung. */
 export function loginForm(onDone: () => void): HTMLFormElement {
   const form = el("form", "ap-f");
   form.autocomplete = "off";
@@ -24,10 +26,17 @@ export function loginForm(onDone: () => void): HTMLFormElement {
   pw.placeholder = "Passwort";
   pw.autocomplete = "off";
   pw.setAttribute("aria-label", "Passwort");
+  // Haken gesetzt (Vorgabe): Passwort im Windows-Tresor; sonst nur fuer diese Sitzung (geplanter Sync und MCP-Server bleiben unberuehrt)
+  const save = el("input");
+  save.type = "checkbox";
+  try { save.checked = localStorage.getItem(KEY_SAVE) !== "0"; } catch { save.checked = true; }
+  const saveRow = el("label", "ap-save");
+  saveRow.title = "Im Windows-Tresor speichern. Ohne Haken gilt das Passwort nur, bis du dich abmeldest oder Kursbuch schließt.";
+  saveRow.append(save, el("span", "", "Passwort speichern"));
   const err = el("p", "ap-err");
   const go = el("button", "n-btn primary", "Anmelden");
   go.type = "submit";
-  form.append(user, pw, err, go);
+  form.append(user, pw, saveRow, err, go);
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
     if (!user.value.trim() || !pw.value) { err.textContent = "Kennung und Passwort eintragen."; return; }
@@ -36,7 +45,8 @@ export function loginForm(onDone: () => void): HTMLFormElement {
     err.textContent = "";
     go.disabled = user.disabled = pw.disabled = true;
     go.textContent = "Prüfe …";
-    api.accountLogin(user.value.trim(), password)
+    try { localStorage.setItem(KEY_SAVE, save.checked ? "1" : "0"); } catch { /* egal */ }
+    api.accountLogin(user.value.trim(), password, save.checked)
       .then(() => { toast("Angemeldet"); onDone(); })
       .catch((e) => { err.textContent = message(e); go.disabled = user.disabled = pw.disabled = false; go.textContent = "Anmelden"; pw.focus(); });
   });
@@ -143,7 +153,7 @@ export class Account {
       const head = el("div", "ap-h");
       head.append(el("span", "ap-av", (s.user ?? "?").slice(0, 1).toUpperCase()), el("div", "ap-id"));
       const id = head.querySelector(".ap-id")!;
-      id.append(el("b", "", s.user ?? ""), el("small", "", this.lastRun ? `Sync ${ago(this.lastRun)}` : "Noch kein Sync"));
+      id.append(el("b", "", s.user ?? ""), el("small", "", `${this.lastRun ? `Sync ${ago(this.lastRun)}` : "Noch kein Sync"}${s.session ? " · Passwort nur in dieser Sitzung" : ""}`));
       const out = el("button", "n-btn", "Abmelden");
       out.addEventListener("click", () => {
         out.disabled = true;

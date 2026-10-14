@@ -630,3 +630,10 @@ body.focus .fcard:nth-child(1) { animation-delay: 0.3s; } body.focus .fcard:nth-
 .tt-more { display: block; margin: 6px 0 0 42px; padding: 2px 8px; border-radius: 8px; font-size: 11px; color: var(--n-dim); transition: background 0.2s; }
 .tt-more:hover { background: var(--hover); color: var(--n-ink); }
 @media (max-width: 880px) { .tt-wk small { display: none; } .tt-day { padding: 4px 8px; } }
+
+/* Anmeldeformular: „Passwort speichern“ */
+.ap-save { display: flex; align-items: center; gap: 9px; width: fit-content; font-size: 12.5px; color: var(--n-dim); cursor: pointer; user-select: none; transition: color 0.2s var(--n-ease); }
+.ap-save:hover { color: var(--n-ink); }
+.ap-save input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--n-accent); cursor: pointer; }
+.lg-card .ap-save { color: rgb(var(--sc) / 0.78); }
+.lg-card .ap-save:hover { color: rgb(var(--sc)); }

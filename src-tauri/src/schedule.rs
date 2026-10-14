@@ -84,9 +84,10 @@ pub fn suggestions(paths: &Paths) -> Result<Vec<Suggestion>, String> {
                 weekday: r.weekday,
                 start: r.start,
                 end: r.end,
-                room: r.room,
-                confidence: r.confidence,
-                source: r.source,
+                // Grenzen des Stundenplans (timetable::validate): eine ueberlange Angabe in der Datei soll das Speichern nicht blockieren
+                room: r.room.map(|s| s.chars().take(80).collect()),
+                confidence: r.confidence.chars().take(20).collect(),
+                source: r.source.chars().take(200).collect(),
                 sessions: r.sessions,
             })
         })
@@ -149,6 +150,10 @@ mod tests {
         assert_eq!(s.len(), 2);
         assert_eq!((s[0].key.as_str(), s[0].title.as_str(), s[0].semester.as_deref(), s[0].start, s[0].room.as_deref()), ("7:0", "VL Sportpsychologie", Some("SoSe 2026"), Some(600), Some("H 4")));
         assert_eq!((s[1].title.as_str(), s[1].start, s[1].end), ("Seminar", None, None));
+        // ueberlange Texte werden auf die Grenzen des Stundenplans gekuerzt
+        std::fs::write(dir.join("data").join("schedule.json"), serde_json::json!({"items": [{"course_id": 7, "weekday": 0, "room": "R".repeat(500), "source": "S".repeat(900)}]}).to_string()).unwrap();
+        let s = suggestions(&p).unwrap();
+        assert_eq!((s[0].room.as_ref().unwrap().len(), s[0].source.len()), (80, 200));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

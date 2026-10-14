@@ -1,6 +1,7 @@
 //! Konto: Anmeldung bei LearnWeb ueber die Python-Seite. Die Zugangsdaten liegen in der Windows-Anmeldeinformationsverwaltung
-//! (keyring), nie in einer Datei und nie in der App: das Passwort geht nur einmal per stdin an `learnweb.cli login`, das es bei
-//! LearnWeb prueft und erst bei Erfolg speichert.
+//! (keyring), nie in einer Datei: das Passwort geht per stdin an `learnweb.cli login`, das es bei LearnWeb prueft und erst bei
+//! Erfolg speichert. Ohne „Passwort speichern“ prueft es nur; die App haelt es dann bis zum Abmelden oder Beenden im Speicher
+//! (py.rs) und reicht es den Syncs durch. Der Tresor (und damit geplanter Sync und MCP-Server) bleibt dabei unberuehrt.
 
 use crate::data::Paths;
 use crate::py;
@@ -12,6 +13,9 @@ pub struct Account {
     pub saved: bool,
     pub user: Option<String>,
     pub running: bool,
+    /// angemeldet ohne gespeichertes Passwort (gilt nur, solange die App laeuft)
+    #[serde(default)]
+    pub session: bool,
 }
 
 #[derive(Deserialize)]
@@ -35,7 +39,10 @@ pub fn valid_user(u: &str) -> bool {
 
 pub fn status(paths: &Paths) -> Result<Account, String> {
     let s: Status = py::last_json(&py::cli(paths, &["status"], None)?).ok_or("Der Kontostatus ließ sich nicht lesen.")?;
-    Ok(Account { saved: s.login.saved, user: s.login.user, running: s.running })
+    Ok(match py::session_user() {
+        Some(user) => Account { saved: true, user: Some(user), running: s.running, session: true },
+        None => Account { saved: s.login.saved, user: s.login.user, running: s.running, session: false },
+    })
 }
 
 #[derive(Deserialize)]
@@ -53,15 +60,19 @@ fn reply(out: &str, fallback: &str) -> Result<(), String> {
     }
 }
 
-/// Prueft die Anmeldung bei LearnWeb und speichert sie dann; ein falsches Passwort ueberschreibt nichts
-pub fn login(paths: &Paths, user: &str, password: &str) -> Result<(), String> {
+/// Prueft die Anmeldung bei LearnWeb und speichert sie dann (`save`) oder merkt sie nur fuer diese Sitzung; ein falsches
+/// Passwort ueberschreibt nichts
+pub fn login(paths: &Paths, user: &str, password: &str, save: bool) -> Result<(), String> {
     if !valid_user(user) {
         return Err("Die Kennung ist ungültig.".into());
     }
     if password.is_empty() || password.contains(['\n', '\r']) {
         return Err("Das Passwort fehlt.".into());
     }
-    reply(&py::cli(paths, &["login", user], Some(password))?, "Die Anmeldung ist fehlgeschlagen.")
+    let args: &[&str] = if save { &["login", user] } else { &["login", user, "--no-save"] };
+    reply(&py::cli(paths, args, Some(password))?, "Die Anmeldung ist fehlgeschlagen.")?;
+    py::set_session((!save).then(|| (user.to_string(), password.to_string())));
+    Ok(())
 }
 
 #[tauri::command]
@@ -71,14 +82,15 @@ pub async fn account_status(paths: State<'_, Paths>) -> Result<Account, String> 
 }
 
 #[tauri::command]
-pub async fn account_login(paths: State<'_, Paths>, user: String, password: String) -> Result<(), String> {
+pub async fn account_login(paths: State<'_, Paths>, user: String, password: String, save: bool) -> Result<(), String> {
     let p = paths.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || login(&p, user.trim(), &password)).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || login(&p, user.trim(), &password, save)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn account_logout(paths: State<'_, Paths>) -> Result<(), String> {
     let p = paths.inner().clone();
+    py::set_session(None); // Abmelden vergisst auch ein nur im Speicher gehaltenes Passwort
     tauri::async_runtime::spawn_blocking(move || reply(&py::cli(&p, &["logout"], None)?, "Das Abmelden ist fehlgeschlagen.")).await.map_err(|e| e.to_string())?
 }
 
@@ -107,9 +119,9 @@ mod tests {
     #[test]
     fn rejects_bad_input_before_any_process_starts() {
         let p = Paths { project: "x".into(), uv: "gibt-es-nicht.exe".into(), config: "x".into(), notch: false };
-        assert_eq!(login(&p, "-x", "pw").unwrap_err(), "Die Kennung ist ungültig.");
-        assert_eq!(login(&p, "abc", "").unwrap_err(), "Das Passwort fehlt.");
-        assert_eq!(login(&p, "abc", "a\nb").unwrap_err(), "Das Passwort fehlt.");
-        assert!(login(&p, "abc", "pw").unwrap_err().contains("uv")); // gueltig: der Start scheitert erst am fehlenden Programm
+        assert_eq!(login(&p, "-x", "pw", true).unwrap_err(), "Die Kennung ist ungültig.");
+        assert_eq!(login(&p, "abc", "", false).unwrap_err(), "Das Passwort fehlt.");
+        assert_eq!(login(&p, "abc", "a\nb", true).unwrap_err(), "Das Passwort fehlt.");
+        assert!(login(&p, "abc", "pw", false).unwrap_err().contains("uv")); // gueltig: der Start scheitert erst am fehlenden Programm
     }
 }
