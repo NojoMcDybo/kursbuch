@@ -1,0 +1,230 @@
+//! Liest den Stand der Python-Seite (State, Konfiguration) und baut daraus die Ansichten.
+//! Die App schreibt hier nichts; Aenderungen laufen ueber die CLI (ab Phase 4).
+
+use crate::model::{semester_rank, split_name, Cm, Config, CourseRec, State};
+use serde::Serialize;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
+use tauri::{AppHandle, Manager};
+
+/// Wo das Python-Projekt und uv liegen (vorbelegt; `settings.json` im App-Ordner darf beides ueberschreiben)
+pub struct Paths {
+    pub project: PathBuf,
+    pub uv: PathBuf,
+}
+
+impl Paths {
+    pub fn load(app: &AppHandle) -> Paths {
+        let home = std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_default();
+        let mut p = Paths { project: home.join("learnweb-mcp"), uv: home.join(".local").join("bin").join("uv.exe") };
+        let file = app.path().app_config_dir().ok().map(|d| d.join("settings.json"));
+        if let Some(v) = file.and_then(|f| std::fs::read(f).ok()).and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
+            if let Some(s) = v["project"].as_str() {
+                p.project = PathBuf::from(s);
+            }
+            if let Some(s) = v["uv"].as_str() {
+                p.uv = PathBuf::from(s);
+            }
+        }
+        p
+    }
+
+    pub fn state_file(&self) -> PathBuf {
+        self.project.join("data").join("sync_state.json")
+    }
+
+    pub fn config_file(&self) -> PathBuf {
+        self.project.join("sync_config.json")
+    }
+}
+
+type Cache = Mutex<Option<(SystemTime, u64, Arc<State>)>>;
+static CACHE: Cache = Mutex::new(None);
+
+/// State laden; nur neu geparst, wenn sich Zeit oder Groesse der Datei geaendert haben. Ein Sync schreibt ueber eine
+/// Nebendatei und benennt sie um; trifft das Lesen genau den Wechsel, hilft ein zweiter Versuch.
+pub fn state(paths: &Paths) -> Result<Arc<State>, String> {
+    let file = paths.state_file();
+    let mut last = String::new();
+    for attempt in 0..3 {
+        if attempt > 0 {
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        let meta = match std::fs::metadata(&file) {
+            Ok(m) => m,
+            Err(_) => return Err("no_state".into()),
+        };
+        let key = (meta.modified().unwrap_or(SystemTime::UNIX_EPOCH), meta.len());
+        if let Some((t, l, s)) = CACHE.lock().unwrap().as_ref() {
+            if (*t, *l) == key {
+                return Ok(s.clone());
+            }
+        }
+        match std::fs::read(&file).map_err(|e| e.to_string()).and_then(|b| serde_json::from_slice::<State>(&b).map_err(|e| e.to_string())) {
+            Ok(s) => {
+                let s = Arc::new(s);
+                *CACHE.lock().unwrap() = Some((key.0, key.1, s.clone()));
+                return Ok(s);
+            }
+            Err(e) => last = e,
+        }
+    }
+    Err(format!("Der Stand von LearnWeb ist nicht lesbar: {last}"))
+}
+
+pub fn ziel(paths: &Paths) -> Result<PathBuf, String> {
+    let b = std::fs::read(paths.config_file()).map_err(|_| "Die Konfiguration des Syncs fehlt (sync_config.json).".to_string())?;
+    let c: Config = serde_json::from_slice(&b).map_err(|e| format!("sync_config.json ist nicht lesbar: {e}"))?;
+    Ok(PathBuf::from(c.ziel))
+}
+
+pub fn course<'a>(s: &'a State, id: i64) -> Result<&'a CourseRec, String> {
+    s.courses.get(&id.to_string()).ok_or_else(|| "Kurs nicht gefunden.".to_string())
+}
+
+/// Labels sind nur Text im Kurs (Ueberschriften, Hinweise) und kein Inhalt
+pub fn visible(cm: &Cm) -> bool {
+    cm.typ != "label"
+}
+
+// --------------------------------------------------------------------------- Ansichten
+
+#[derive(Serialize)]
+pub struct Overview {
+    /// ok | no_state (noch kein Sync) | error
+    pub status: &'static str,
+    pub error: Option<String>,
+    pub last_run: Option<i64>,
+    pub courses: Vec<CourseCard>,
+}
+
+#[derive(Serialize)]
+pub struct CourseCard {
+    pub id: i64,
+    pub title: String,
+    pub semester: Option<String>,
+    pub teacher: Option<String>,
+    pub activities: usize,
+    pub files: usize,
+    pub skipped: usize,
+    pub errors: usize,
+}
+
+pub fn overview(paths: &Paths) -> Overview {
+    let s = match state(paths) {
+        Ok(s) => s,
+        Err(e) if e == "no_state" => return Overview { status: "no_state", error: None, last_run: None, courses: vec![] },
+        Err(e) => return Overview { status: "error", error: Some(e), last_run: None, courses: vec![] },
+    };
+    let mut courses: Vec<CourseCard> = s
+        .courses
+        .values()
+        .map(|c| {
+            let n = split_name(&c.name);
+            let cms: Vec<&Cm> = c.cms.values().filter(|m| visible(m)).collect();
+            CourseCard {
+                id: c.id,
+                title: n.title,
+                semester: n.semester,
+                teacher: n.teacher,
+                activities: cms.len(),
+                files: cms.iter().map(|m| m.files.len()).sum(),
+                skipped: cms.iter().map(|m| m.skipped.len()).sum(),
+                errors: cms.iter().filter(|m| m.error.is_some()).count(),
+            }
+        })
+        .collect();
+    courses.sort_by(|a, b| {
+        semester_rank(b.semester.as_deref())
+            .cmp(&semester_rank(a.semester.as_deref()))
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    Overview { status: "ok", error: None, last_run: s.last_run, courses }
+}
+
+#[derive(Serialize)]
+pub struct CourseView {
+    pub id: i64,
+    pub title: String,
+    pub semester: Option<String>,
+    pub teacher: Option<String>,
+    pub web: bool,
+    pub note: bool,
+    pub sections: Vec<SectionView>,
+}
+
+#[derive(Serialize)]
+pub struct SectionView {
+    pub title: String,
+    pub items: Vec<ItemView>,
+}
+
+#[derive(Serialize)]
+pub struct ItemView {
+    pub cmid: i64,
+    pub name: String,
+    pub typ: String,
+    pub files: Vec<FileView>,
+    /// Groessen (MB) der Dateien, die zu gross zum Spiegeln waren
+    pub skipped_mb: Vec<f64>,
+    pub error: bool,
+    /// hat eine Seite in LearnWeb, die sich im Browser oeffnen laesst
+    pub web: bool,
+}
+
+#[derive(Serialize)]
+pub struct FileView {
+    pub idx: usize,
+    pub name: String,
+    pub ext: String,
+}
+
+/// Nur Adressen innerhalb von LearnWeb werden im Browser geoeffnet
+pub const WEB_BASE: &str = "https://www.uni-muenster.de/LearnWeb/";
+
+pub fn is_web(url: &Option<String>) -> bool {
+    url.as_deref().is_some_and(|u| u.starts_with(WEB_BASE))
+}
+
+pub fn note_path(ziel: &Path, c: &CourseRec) -> PathBuf {
+    ziel.join(&c.dir).join(format!("{}.md", c.dir))
+}
+
+pub fn course_view(paths: &Paths, id: i64) -> Result<CourseView, String> {
+    let s = state(paths)?;
+    let c = course(&s, id)?;
+    let n = split_name(&c.name);
+    let note = ziel(paths).map(|z| note_path(&z, c).is_file()).unwrap_or(false);
+    let sections = c
+        .layout
+        .iter()
+        .map(|(title, ids)| SectionView {
+            title: title.clone(),
+            items: ids
+                .iter()
+                .filter_map(|k| Some((k.parse::<i64>().ok()?, c.cms.get(k)?)))
+                .filter(|(_, m)| visible(m))
+                .map(|(cmid, m)| ItemView {
+                    cmid,
+                    name: m.name.clone(),
+                    typ: m.typ.clone(),
+                    files: m
+                        .files
+                        .iter()
+                        .enumerate()
+                        .map(|(idx, f)| {
+                            let name = f.rsplit('/').next().unwrap_or(f).to_string();
+                            let ext = name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default();
+                            FileView { idx, name, ext }
+                        })
+                        .collect(),
+                    skipped_mb: m.skipped.iter().map(|x| x.mb).collect(),
+                    error: m.error.is_some(),
+                    web: is_web(&m.url),
+                })
+                .collect(),
+        })
+        .collect();
+    Ok(CourseView { id: c.id, title: n.title, semester: n.semester, teacher: n.teacher, web: is_web(&c.url), note, sections })
+}

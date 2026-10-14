@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kursbuch</title>
+    <link rel="stylesheet" href="/src/nojo/nojo-ui.css" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body class="n-window">
+    <!-- rahmenloses Fenster: Kopf zum Ziehen (Raster: Marke | Reiter | Status); Reiter und Status schweben als Liquid
+         Glass ueber dem Inhalt, die Fensterknoepfe (Glaspille) setzt main.ts. -->
+    <header class="top" data-tauri-drag-region>
+      <div class="brand" data-tauri-drag-region>Kursbuch</div>
+      <nav class="tabs n-seg n-liquid panel" role="tablist" aria-label="Ansicht">
+        <button role="tab" data-view="heute"><i data-icon="kalender"></i>Heute</button>
+        <button role="tab" data-view="kurse"><i data-icon="kursbuch"></i>Kurse</button>
+        <button role="tab" data-view="suche"><i data-icon="search"></i>Suche</button>
+      </nav>
+      <div class="top-right" data-tauri-drag-region>
+        <span class="sync n-glass n-liquid" role="status" title="Letzter Sync"><i class="dot"></i><span class="sync-t">–</span></span>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- Heute: Fristen und Neues (kommt in Phase 3) -->
+      <section class="view" data-view="heute" hidden>
+        <p class="n-eyebrow day"></p>
+        <div class="empty n-card">
+          <i class="empty-ico" data-icon="kalender"></i>
+          <p>Fristen und Neues erscheinen hier.</p>
+          <p class="faint">Kommt als Nächstes.</p>
+        </div>
+      </section>
+
+      <!-- Kurse: Raster, darin die Kursansicht -->
+      <section class="view" data-view="kurse" hidden></section>
+
+      <!-- Suche (Strg+K): Volltext kommt in Phase 3 -->
+      <section class="view" data-view="suche" hidden>
+        <input class="search n-input" type="search" placeholder="Kurse, Dateien, Inhalte …" spellcheck="false" autocomplete="off" disabled />
+        <div class="empty n-card">
+          <i class="empty-ico" data-icon="search"></i>
+          <p>Die Volltextsuche kommt als Nächstes.</p>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast n-glass n-liquid panel" role="alert" hidden></div>
+    <div class="sr" aria-live="polite"></div>
+  </body>
+</html>
