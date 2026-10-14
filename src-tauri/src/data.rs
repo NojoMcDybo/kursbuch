@@ -10,6 +10,7 @@ use tauri::{AppHandle, Manager};
 
 /// Wo das Python-Projekt und uv liegen (vorbelegt) und wo die App ihre eigenen Dateien ablegt. `settings.json` im
 /// App-Ordner darf `project` und `uv` ueberschreiben und mit `"notch": false` die Notch-Karte abschalten.
+#[derive(Clone)]
 pub struct Paths {
     pub project: PathBuf,
     pub uv: PathBuf,

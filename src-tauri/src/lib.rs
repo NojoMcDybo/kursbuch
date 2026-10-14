@@ -7,6 +7,9 @@
 //! - visits.rs: „Neu seit dem letzten Oeffnen“
 //! - notch.rs:  Lage der Notch (die Oberflaeche weicht aus) und die Karte „naechste Frist“
 //! - open.rs:   Dateien (PDF -> Folio), Links, Obsidian-Notiz und Ordner oeffnen; nur IDs von der Oberflaeche
+//! - search.rs: Volltextsuche im Index (data/index.db, nur lesend) und Kurstext fuer die KI
+//! - share.rs:  „Fuer KI kopieren“ (Verzeichnis, Kurstext) und Datei in die Zwischenablage
+//! - fetch.rs:  Sofort-Download einer Aktivitaet ueber die Python-Seite
 //! - links.rs:  Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff> (nur navigieren)
 //!
 //! Die App kennt keine Passwoerter und spricht nie mit LearnWeb: Nur die Python-Seite (learnweb-mcp) tut das.
@@ -14,10 +17,13 @@
 mod colors;
 mod data;
 mod events;
+mod fetch;
 mod links;
 mod model;
 mod notch;
 mod open;
+mod search;
+mod share;
 mod visits;
 
 use std::sync::Mutex;
@@ -76,6 +82,13 @@ fn mark_read(visits: tauri::State<visits::Visits>) {
     visits.mark_read();
 }
 
+/// Volltextsuche; `courses` leer = alle Kurse. Laeuft auf einem eigenen Thread (SQLite), damit Tippen nie stockt.
+#[tauri::command]
+async fn search(paths: tauri::State<'_, data::Paths>, q: String, deep: bool, courses: Vec<i64>) -> Result<search::Found, String> {
+    let p = paths.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || search::search(&p, &q, deep, &courses)).await.map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -91,12 +104,17 @@ pub fn run() {
             events,
             news,
             mark_read,
+            search,
+            fetch::fetch,
+            share::for_ai,
+            share::copy_file,
             take_pending,
             notch::notch_rect,
             open::open_file,
             open::open_web,
             open::open_note,
             open::open_folder,
+            open::open_directory,
         ])
         .setup(|app| {
             let h = app.handle().clone();

@@ -320,6 +320,16 @@ export const NOJO_ICONS = {
     "body": "<rect x=\"3.5\" y=\"6\" width=\"17\" height=\"12\" rx=\"3\"/><path d=\"m10.5 9.7 4 2.3-4 2.3z\"/>",
     "label": "Video, Aufzeichnung"
   },
+  "copy": {
+    "kind": "line",
+    "body": "<rect x=\"8.5\" y=\"8.5\" width=\"11\" height=\"11.5\" rx=\"2.2\"/><path d=\"M15.5 5.6V5a1.8 1.8 0 0 0-1.8-1.8H6A1.8 1.8 0 0 0 4.2 5v8.2A1.8 1.8 0 0 0 6 15h.5\"/>",
+    "label": "Kopieren"
+  },
+  "spark": {
+    "kind": "line",
+    "body": "<path d=\"M12 3.5c.5 4.3 2.2 6 6.5 6.5-4.3.5-6 2.2-6.5 6.5-.5-4.3-2.2-6-6.5-6.5 4.3-.5 6-2.2 6.5-6.5z\"/><path d=\"M18.5 15.5c.2 1.6.8 2.2 2.4 2.4-1.6.2-2.2.8-2.4 2.4-.2-1.6-.8-2.2-2.4-2.4 1.6-.2 2.2-.8 2.4-2.4z\"/>",
+    "label": "KI, Assistent"
+  },
   "kalender": {
     "kind": "line",
     "body": "<rect x=\"4\" y=\"5.5\" width=\"16\" height=\"14.5\" rx=\"2.5\"/><path d=\"M4 10h16\"/><path d=\"M8.5 3.5v4\"/><path d=\"M15.5 3.5v4\"/>",

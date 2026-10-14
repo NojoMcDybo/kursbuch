@@ -102,11 +102,16 @@ pub fn open_web(app: AppHandle, paths: State<Paths>, course: i64, cmid: Option<i
 /// Obsidian-Adresse der Kursnotiz. Tresor = Ordner ueber `ziel` ("Second Brain"), Datei = "<ziel>/<dir>/<dir>" ohne .md
 const ENC: &AsciiSet = &NON_ALPHANUMERIC.remove(b'/').remove(b'-').remove(b'_').remove(b'.').remove(b'~');
 
-pub fn obsidian_url(ziel: &Path, dir: &str) -> Option<String> {
+/// Obsidian-Adresse einer Notiz unter `ziel` (`rel` ohne .md)
+fn obsidian_file(ziel: &Path, rel: &str) -> Option<String> {
     let vault = ziel.parent()?.file_name()?.to_str()?;
     let sub = ziel.file_name()?.to_str()?;
     let enc = |s: &str| utf8_percent_encode(s, ENC).to_string();
-    Some(format!("obsidian://open?vault={}&file={}", enc(vault), enc(&format!("{sub}/{dir}/{dir}"))))
+    Some(format!("obsidian://open?vault={}&file={}", enc(vault), enc(&format!("{sub}/{rel}"))))
+}
+
+pub fn obsidian_url(ziel: &Path, dir: &str) -> Option<String> {
+    obsidian_file(ziel, &format!("{dir}/{dir}"))
 }
 
 #[tauri::command]
@@ -118,6 +123,17 @@ pub fn open_note(app: AppHandle, paths: State<Paths>, course: i64) -> Result<(),
         return Err("Die Kursnotiz gibt es noch nicht (nach dem nächsten Sync).".into());
     }
     let url = obsidian_url(&ziel, &c.dir).ok_or("Der Obsidian-Tresor lässt sich nicht bestimmen.")?;
+    app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// _Verzeichnis.md in Obsidian (liegt direkt in `ziel`)
+#[tauri::command]
+pub fn open_directory(app: AppHandle, paths: State<Paths>) -> Result<(), String> {
+    let ziel = data::ziel(&paths)?;
+    if !ziel.join("_Verzeichnis.md").is_file() {
+        return Err("Das Verzeichnis gibt es noch nicht (nach dem nächsten Sync).".into());
+    }
+    let url = obsidian_file(&ziel, "_Verzeichnis").ok_or("Der Obsidian-Tresor lässt sich nicht bestimmen.")?;
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
@@ -190,5 +206,6 @@ mod tests {
              Gulliver%27s%20Travels%20at%20300%20WiSe%202026_27%2C%20Kirsten%20Ju"
         );
         assert_eq!(obsidian_url(Path::new(r"D:\"), "x"), None);
+        assert_eq!(obsidian_file(Path::new(r"D:\Second Brain\Second Brain\LearnWeb"), "_Verzeichnis").unwrap(), "obsidian://open?vault=Second%20Brain&file=LearnWeb/_Verzeichnis");
     }
 }

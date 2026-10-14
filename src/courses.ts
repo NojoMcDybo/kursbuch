@@ -4,12 +4,12 @@
  * Ist nichts geoeffnet, zeigt die Mitte die Kurse des Semesters als grosse Kacheln.
  */
 
-import { api, type CourseCard, type CourseView, type Ev, type ItemView, type Overview } from "./api";
+import { api, type CourseCard, type CourseView, type Ev, type FetchError, type ItemView, type Overview } from "./api";
 import { left, urgency } from "./dates";
 import { lightScroller, type IconName } from "./nojo/nojo-ui";
 import { typeIcon } from "./side";
 import { KIND_ICON } from "./timeline";
-import { act, announce, el, hsl, ico, iconBtn } from "./ui";
+import { act, announce, copyText, el, hsl, ico, iconBtn, menu, message, num, toast } from "./ui";
 
 const MIN_PANE = 500;
 const GAP = 14;
@@ -21,6 +21,8 @@ export type CoursesOpts = {
   nextOf: (course: number) => Ev | undefined;
   /** Semester oder geoeffnete Kurse haben sich geaendert (Nebel, Zeitstrahl, Kalender nachziehen) */
   onChange: () => void;
+  /** Daten haben sich geaendert (Sofort-Download): Stand neu holen */
+  onData: () => void;
 };
 
 /** Das Semester, in dem heute liegt (Oktober-Maerz = WiSe, April-September = SoSe) */
@@ -42,6 +44,8 @@ export class Courses {
   private views = new Map<number, CourseView>();
   private sigs = new Map<number, string>();
   private scrollers = new Map<number, Scroller>();
+  /** laufende Sofort-Downloads ("kurs:cmid") */
+  private busy = new Set<string>();
 
   constructor(private o: CoursesOpts) {
     this.el.append(this.strip, this.stage);
@@ -67,6 +71,7 @@ export class Courses {
   }
   openIds() { return [...this.opened]; }
   private inSemester() { return this.cards.filter((c) => (c.semester ?? "Weitere") === this.sem); }
+  semesterIds() { return this.inSemester().map((c) => c.id); }
 
   setOverview(ov: Overview) {
     this.ov = ov;
@@ -101,6 +106,26 @@ export class Courses {
     this.o.onChange();
     this.panes?.querySelector<HTMLElement>(`.pane[data-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
     announce(c.title);
+    return true;
+  }
+
+  /** Kurs oeffnen und eine Aktivitaet oder einen Abschnitt darin zeigen (blinkt kurz auf) */
+  async reveal(id: number, target?: { cmid?: number; section?: string }) {
+    if (!(await this.open(id))) return false;
+    const pane = this.panes?.querySelector<HTMLElement>(`.pane[data-id="${id}"]`);
+    const hit = !target
+      ? null
+      : target.cmid != null
+        ? pane?.querySelector<HTMLElement>(`[data-cmid="${target.cmid}"]`)
+        : [...(pane?.querySelectorAll<HTMLElement>(".sec") ?? [])].find((s) => s.dataset.title === target.section);
+    const body = pane?.querySelector<HTMLElement>(".p-body");
+    if (!hit || !body) return true;
+    // nur senkrecht im Seitenkoerper blaettern (scrollIntoView wuerde auch die Reihe der Seiten verschieben)
+    const top = hit.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - (body.clientHeight - hit.offsetHeight) / 2;
+    body.scrollTo({ top: Math.max(0, top), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+    hit.classList.remove("flash");
+    void hit.offsetWidth;
+    hit.classList.add("flash");
     return true;
   }
 
@@ -275,7 +300,11 @@ export class Courses {
     web.disabled = !v.web;
     const note = iconBtn("open", v.note ? "Notiz in Obsidian" : "Noch keine Notiz", "n-ico sm", () => act(api.openNote(v.id)));
     note.disabled = !v.note;
-    acts.append(web, note, iconBtn("folder", "Ordner", "n-ico sm", () => act(api.openFolder(v.id))), iconBtn("close", "Schließen", "n-ico sm", () => this.close(v.id)));
+    const ai = iconBtn("spark", "Für KI kopieren", "n-ico sm", () => menu(ai, [
+      { icon: "document", label: "Übersicht", hint: "Dateien, Seiten, Anfänge", run: () => void this.copyOutline(v.id, false) },
+      { icon: "spark", label: "Übersicht + Text", hint: "samt Text aller Dateien", run: () => void this.copyOutline(v.id, true) },
+    ]));
+    acts.append(ai, web, note, iconBtn("folder", "Ordner", "n-ico sm", () => act(api.openFolder(v.id))), iconBtn("close", "Schließen", "n-ico sm", () => this.close(v.id)));
     head.append(el("i", "p-dot"), t, acts);
     const body = el("div", "p-body");
     this.fillBody(body, v);
@@ -286,6 +315,7 @@ export class Courses {
   private fillBody(body: HTMLElement, v: CourseView) {
     const secs = v.sections.filter((s) => s.items.length).map((s) => {
       const sec = el("section", "sec");
+      sec.dataset.title = s.title;
       sec.append(el("h3", "sec-h", s.title));
       const ul = el("ul", "rows");
       for (const it of s.items) ul.append(this.item(v, it));
@@ -298,26 +328,82 @@ export class Courses {
   /** Datei -> Folio/Standardprogramm, Ordner -> Dateien darunter, Link -> Browser, Label -> Text */
   private item(v: CourseView, it: ItemView) {
     const li = el("li", "it");
+    li.dataset.cmid = String(it.cmid);
     if (it.typ === "label") { li.className = "txt"; li.textContent = it.name; return li; }
-    const row = (name: IconName, label: string, meta: string, run?: () => Promise<void>, cls = "") => {
+    if (this.busy.has(`${v.id}:${it.cmid}`)) li.classList.add("busy");
+    /** Zeile; `acts` sind Symbolknoepfe am rechten Rand (beim Zeigen; `show` = immer sichtbar) */
+    const row = (name: IconName, label: string, meta: string, run?: () => Promise<unknown>, cls = "", acts: HTMLElement[] = [], show = false) => {
+      const w = el("div", "rw");
       const r = el(run ? "button" : "div", `row ${cls}`.trim());
       r.append(ico(name), el("span", "r-name", label), el("span", "r-meta", meta));
       if (run) r.addEventListener("click", () => act(run()));
-      return r;
+      w.append(r);
+      if (acts.length) {
+        const a = el("div", "r-acts");
+        a.append(...acts);
+        w.append(a);
+        w.classList.add("has-acts");
+        w.classList.toggle("show", show);
+      }
+      return w;
     };
+    const copy = (idx: number) => iconBtn("copy", "Datei kopieren", "n-ico sm", () => act(api.copyFile(v.id, it.cmid, idx).then(() => toast("Kopiert"))));
+    const load = (all: boolean) => iconBtn("download", all ? "Laden (auch große Dateien)" : "Laden", "n-ico sm", () => void this.download(v, it, all));
+    const external = () => iconBtn("external", "LearnWeb", "n-ico sm", () => act(api.openWeb(v.id, it.cmid)));
+    const fetchable = it.typ === "resource" || it.typ === "folder";
     const single = it.files.length === 1 && it.typ !== "folder";
-    if (single) li.append(row(typeIcon(it.typ), it.name, it.files[0].ext.toUpperCase(), () => api.openFile(v.id, it.cmid, it.files[0].idx)));
+    if (single) li.append(row(typeIcon(it.typ), it.name, it.files[0].ext.toUpperCase(), () => api.openFile(v.id, it.cmid, it.files[0].idx), "", [copy(it.files[0].idx)]));
     else if (it.files.length) {
       li.append(row(typeIcon(it.typ), it.name, String(it.files.length), undefined, "head"));
-      for (const f of it.files) li.append(row("document", f.name, f.ext.toUpperCase(), () => api.openFile(v.id, it.cmid, f.idx), "sub"));
-    } else if (it.web) {
-      const r = row(typeIcon(it.typ), it.name, "", () => api.openWeb(v.id, it.cmid), "web");
-      r.querySelector(".r-meta")!.append(ico("external", 13));
-      li.append(r);
-    } else li.append(row(typeIcon(it.typ), it.name, "", undefined, "plain"));
-    for (const mb of it.skipped_mb) li.append(row("download", `${mb.toLocaleString("de-DE")} MB`, "", it.web ? () => api.openWeb(v.id, it.cmid) : undefined, "note"));
-    if (it.error) li.append(row("refresh", "", "", undefined, "note"));
+      for (const f of it.files) li.append(row("document", f.name, f.ext.toUpperCase(), () => api.openFile(v.id, it.cmid, f.idx), "sub", [copy(f.idx)]));
+    } else {
+      // keine Datei auf der Platte: laden (wenn es eine Datei oder ein Ordner ist und nichts als zu gross vermerkt ist)
+      const get = fetchable && !it.skipped_mb.length ? [load(false)] : [];
+      if (it.web) {
+        const w = row(typeIcon(it.typ), it.name, "", () => api.openWeb(v.id, it.cmid), "web", get, true);
+        w.querySelector(".r-meta")!.append(ico("external", 13));
+        li.append(w);
+      } else li.append(row(typeIcon(it.typ), it.name, "", undefined, "plain", get, true));
+    }
+    // zu gross: ein Klick laedt es ausdruecklich trotzdem
+    for (const mb of it.skipped_mb) li.append(row("download", `${num(mb)} MB`, "", () => this.download(v, it, true), "note", it.web ? [external()] : []));
+    if (it.error) {
+      const w = row("refresh", "", "", () => this.download(v, it, false), "note");
+      w.title = "Erneut laden";
+      li.append(w);
+    }
     return li;
+  }
+
+  /** Sofort laden (ueber die Python-Seite); `all` = auch Dateien, die beim Sync als zu gross uebersprungen wurden */
+  private async download(v: CourseView, it: ItemView, all: boolean) {
+    const key = `${v.id}:${it.cmid}`;
+    if (this.busy.has(key)) return;
+    this.busy.add(key);
+    const mark = (on: boolean) => this.panes?.querySelectorAll<HTMLElement>(`.pane[data-id="${v.id}"] [data-cmid="${it.cmid}"]`).forEach((n) => n.classList.toggle("busy", on));
+    mark(true);
+    try {
+      const r = await api.fetch(v.id, it.cmid, all);
+      toast(`${r.files} ${r.files === 1 ? "Datei" : "Dateien"} geladen${r.skipped ? ` · ${r.skipped} zu groß` : ""}`);
+      this.o.onData();
+    } catch (e) {
+      if ((e as Partial<FetchError> | null)?.code === "too_large") toast(message(e), { label: "Trotzdem laden", run: () => void this.download(v, it, true) });
+      else toast(message(e));
+    } finally {
+      this.busy.delete(key);
+      mark(false);
+    }
+  }
+
+  /** Uebersicht (mit Text) eines Kurses als Markdown in die Zwischenablage, fuer Claude/ChatGPT */
+  private async copyOutline(id: number, withText: boolean) {
+    try {
+      const o = await api.forAi(id, withText);
+      await copyText(o.text);
+      toast(`Kopiert · ${num(o.chars)} Zeichen${o.truncated ? " (gekürzt)" : ""}`);
+    } catch (e) {
+      toast(message(e));
+    }
   }
 
   /** Farbe eines Kurses fuer andere Teile der Oberflaeche */

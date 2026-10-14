@@ -36,21 +36,74 @@ export function fillIcons(root: ParentNode = document) {
 export const announce = (t: string) => { q(".sr").textContent = t; };
 
 let toastTimer = 0;
-/** Kurze Meldung unten (Fehler beim Oeffnen u. ae.) */
-export function toast(msg: string) {
+/** Kurze Meldung unten (Fehler beim Oeffnen u. ae.); mit `action` ein Knopf dazu (z. B. „Trotzdem laden“) */
+export function toast(msg: string, action?: { label: string; run: () => void }) {
   const t = q(".toast");
-  t.textContent = msg;
+  t.replaceChildren(msg);
+  if (action) {
+    const b = el("button", "toast-a", action.label);
+    b.addEventListener("click", () => { t.hidden = true; action.run(); });
+    t.append(b);
+  }
   t.hidden = false;
   announce(msg);
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { t.hidden = true; }, 4500);
+  toastTimer = window.setTimeout(() => { t.hidden = true; }, action ? 9000 : 4500);
 }
 
-const message = (e: unknown) => (typeof e === "string" ? e : e instanceof Error ? e.message : "Unbekannter Fehler.");
+/** Text einer Fehlermeldung aus Rust (String oder { message }) */
+export const message = (e: unknown): string =>
+  typeof e === "string" ? e : e instanceof Error ? e.message : typeof (e as { message?: unknown } | null)?.message === "string" ? (e as { message: string }).message : "Unbekannter Fehler.";
 
 /** Aktion starten; Fehler als Meldung zeigen */
 export function act(p: Promise<unknown>) {
   p.catch((e) => toast(message(e)));
+}
+
+/** In die Zwischenablage (Rueckfall ueber ein verstecktes Feld, falls die Schnittstelle fehlt oder abgelehnt wird) */
+export async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const t = el("textarea");
+    t.value = text;
+    t.style.cssText = "position:fixed;left:-9999px;top:0";
+    document.body.append(t);
+    t.select();
+    const ok = document.execCommand("copy");
+    t.remove();
+    if (!ok) throw new Error("Die Zwischenablage ist nicht erreichbar.");
+  }
+}
+
+/** 12400 -> „12.400“ */
+export const num = (n: number) => n.toLocaleString("de-DE");
+
+export type MenuItem = { icon: IconName; label: string; hint?: string; run: () => void };
+
+/** Kleines Glasmenue unter einem Knopf; schliesst bei Klick daneben, Esc oder Auswahl */
+export function menu(anchor: HTMLElement, items: MenuItem[]) {
+  document.querySelector(".menu")?.remove();
+  const m = el("div", "menu n-glass n-liquid panel");
+  m.setAttribute("role", "menu");
+  const close = () => { m.remove(); document.removeEventListener("pointerdown", away, true); document.removeEventListener("keydown", key, true); };
+  const away = (e: Event) => { if (!m.contains(e.target as Node)) close(); };
+  const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  for (const it of items) {
+    const b = el("button", "menu-i");
+    b.setAttribute("role", "menuitem");
+    b.append(ico(it.icon), el("span", "", it.label));
+    if (it.hint) b.append(el("small", "", it.hint));
+    b.addEventListener("click", () => { close(); it.run(); });
+    m.append(b);
+  }
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect();
+  m.style.top = `${r.bottom + 6}px`;
+  m.style.left = `${Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth))}px`;
+  document.addEventListener("pointerdown", away, true);
+  document.addEventListener("keydown", key, true);
+  m.querySelector<HTMLElement>("button")?.focus();
 }
 
 /** Farbe eines Kurses aus seinem Farbton (gleiche Formel wie die Notch-Karte in Rust: hsl(Ton 68% 62%)) */

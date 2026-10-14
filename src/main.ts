@@ -15,6 +15,7 @@ import { Courses } from "./courses";
 import { dayOfTs, todayDay } from "./dates";
 import { Fog } from "./fog";
 import { applyNotch, watchNotch } from "./notch-align";
+import { isSearchKey, Search } from "./search";
 import { Side } from "./side";
 import { Timeline } from "./timeline";
 import { el, fillIcons, hueHex, ico, q, shortSem, toast } from "./ui";
@@ -28,6 +29,7 @@ let cal: Calendar;
 let agenda: Agenda;
 let side: Side;
 let courses: Courses;
+let search: Search;
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -95,6 +97,7 @@ async function refresh() {
 
 async function go(l: Link) {
   if (l.view === "kurs") { if (!(await courses.open(l.arg))) toast("Kurs nicht gefunden"); }
+  else if (l.view === "suche") search.open(l.arg);
   else if (l.view === "heute") {
     tl.today();
     cal.pick(todayDay());
@@ -127,7 +130,16 @@ async function main() {
   courses = new Courses({
     nextOf: (id) => events.filter((e) => e.course === id && e.ts >= Date.now() / 1000 - 3600).sort((a, b) => a.ts - b.ts)[0],
     onChange: () => { renderSems(); tint(); },
+    onData: () => void refresh(),
   });
+  search = new Search({
+    hueOf, nameOf,
+    semesterIds: () => courses.semesterIds(),
+    semesterLabel: () => (courses.semester ? shortSem(courses.semester) : ""),
+    reveal: (id, target) => courses.reveal(id, target),
+  });
+  document.body.append(search.el);
+  q(".find").addEventListener("click", () => search.open());
   tl = new Timeline({ hueOf, nameOf, onOpen: open });
   cal = new Calendar({ hueOf, nameOf, onOpen: open, onPick: (day) => tl.focusDay(day) });
   agenda = new Agenda({ hueOf, nameOf, onOpen: open });
@@ -155,6 +167,7 @@ async function main() {
   }));
   scrim.addEventListener("click", closeDrawers);
   document.addEventListener("keydown", (e) => {
+    if (isSearchKey(e)) { e.preventDefault(); search.open(); return; }
     if (e.key === "Escape") { if (document.body.classList.contains("dl") || document.body.classList.contains("dr")) closeDrawers(); else if (document.body.classList.contains("full")) void setFull(false); }
     if (e.key === "F11") { e.preventDefault(); void setFull(!document.body.classList.contains("full")); }
   });

@@ -168,6 +168,21 @@ body.notched .grp.r { margin-left: 0; flex: 1; justify-content: flex-end; }
   background: linear-gradient(180deg, rgba(22, 22, 26, 0.72) 55%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .row { display: flex; align-items: center; gap: 11px; width: 100%; margin: 0 -8px; padding: 7px 8px; border-radius: 10px; text-align: left; font-size: 13px; }
 .rows { margin: 0 -2px; }
+/* Zeile mit Aktionen: der Knopf ueber die ganze Breite, die Symbolknoepfe liegen rechts darueber und erscheinen beim Zeigen */
+.rw { position: relative; }
+.r-acts { position: absolute; right: -6px; top: 50%; translate: 0 -50%; display: flex; gap: 0; opacity: 0; pointer-events: none; transition: opacity 0.2s var(--n-ease); }
+.r-acts .n-ico.sm { width: 26px; height: 26px; }
+.rw:hover .r-acts, .rw:focus-within .r-acts, .rw.show .r-acts { opacity: 1; pointer-events: auto; }
+.rw.has-acts:not(.show):hover .r-meta, .rw.has-acts:not(.show):focus-within .r-meta { opacity: 0; }
+.rw.has-acts .r-meta { transition: opacity 0.15s; }
+.rw.show .r-meta svg { display: none; }
+.it.busy .row > svg { animation: spin 0.9s linear infinite; }
+.it.busy .r-acts, .it.busy button.row { pointer-events: none; opacity: 0.7; }
+@keyframes spin { to { rotate: 360deg; } }
+/* Treffer aus der Suche blinken kurz in der Kursfarbe */
+.it, .sec { border-radius: 10px; }
+.flash { animation: flash 1.8s var(--n-ease); }
+@keyframes flash { 0%, 35% { background: color-mix(in srgb, var(--c) 28%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 28%, transparent); } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
 button.row { transition: background 0.2s var(--n-ease), padding 0.3s var(--n-spring); }
 button.row:hover { background: color-mix(in srgb, var(--c) 14%, transparent); padding-left: 12px; }
 .row > svg { width: 16px; height: 16px; color: color-mix(in srgb, var(--c) 70%, var(--n-dim)); flex: none; }
@@ -231,10 +246,61 @@ button.row:hover { background: color-mix(in srgb, var(--c) 14%, transparent); pa
 .chip-l.u1 { color: var(--n-warn); background: rgba(237, 188, 86, 0.14); }
 .chip-l.u2 { color: var(--n-low); background: rgba(255, 121, 113, 0.14); }
 
+/* ---------- Menue ---------- */
+.menu { position: fixed; z-index: 70; min-width: 210px; padding: 6px; border-radius: 16px; display: flex; flex-direction: column; animation: pop 0.28s var(--n-spring) both; transform-origin: top right; }
+.menu-i { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 12.5px; transition: background 0.2s var(--n-ease); }
+.menu-i:hover, .menu-i:focus-visible { background: var(--hover); outline: none; }
+.menu-i svg { width: 16px; height: 16px; color: var(--n-dim); flex: none; }
+.menu-i small { margin-left: auto; padding-left: 14px; color: var(--n-faint); font-size: 11px; }
+@keyframes pop { from { opacity: 0; scale: 0.94; translate: 0 -4px; } }
+
+/* ---------- Suche (Strg+K) ---------- */
+.sx { position: fixed; inset: 0; z-index: 55; display: flex; justify-content: center; align-items: flex-start; padding: clamp(64px, 11vh, 120px) 16px 16px; }
+.sx-back { position: absolute; inset: 0; background: rgba(8, 8, 12, 0.42); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); animation: fade 0.25s var(--n-ease) both; }
+.sx-panel { position: relative; width: min(780px, 100%); max-height: min(78vh, 760px); display: flex; flex-direction: column; border-radius: 26px; overflow: hidden; --n-glass: rgba(26, 26, 30, 0.72);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5); animation: pop 0.38s var(--n-spring) both; transform-origin: top center; }
+.sx-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px 18px; border-bottom: 1px solid var(--n-line); }
+.sx-bar > svg { width: 19px; height: 19px; color: var(--n-dim); flex: none; }
+.sx-in { flex: 1; min-width: 0; height: 36px; border: 0; background: none; color: var(--n-ink); font: 500 17px var(--n-font); letter-spacing: -0.2px; outline: none; user-select: text; }
+.sx-in:focus, .sx-in:focus-visible { outline: none; box-shadow: none; }
+.sx-in::placeholder { color: var(--n-faint); }
+.sx-seg > button { padding: 5px 11px; font-size: 11.5px; white-space: nowrap; }
+.sx-list { flex: 1; min-height: 120px; overflow-y: auto; padding: 4px 8px 8px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; transition: opacity 0.2s; }
+.sx-list.busy { opacity: 0.55; }
+.sx-note { min-height: 180px; display: grid; place-items: center; align-content: center; gap: 12px; color: var(--n-faint); text-align: center; font-size: 12.5px; padding: 18px; }
+.sx-note svg { width: 34px; height: 34px; }
+.sx-keys { display: flex; gap: 8px; }
+kbd { font: 600 11px var(--n-font); padding: 3px 8px; border-radius: 7px; background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px var(--n-line); color: var(--n-dim); }
+.sx-g { --c: rgba(245, 245, 247, 0.8); }
+.sx-g + .sx-g { margin-top: 4px; }
+.sx-gh { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 9px; margin: 0 -8px; padding: 10px 18px 6px; font: 600 12px/1.2 var(--n-font); letter-spacing: 0.02em; color: color-mix(in srgb, var(--c) 78%, white);
+  background: linear-gradient(180deg, rgba(24, 24, 28, 0.92) 60%, transparent); }
+.sx-gh small { margin-left: auto; font-weight: 500; color: var(--n-faint); font-variant-numeric: tabular-nums; }
+.sx-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c); flex: none; }
+.sx-row { position: relative; border-radius: 12px; transition: background 0.15s; }
+.sx-row.sel { background: color-mix(in srgb, var(--c) 16%, rgba(255, 255, 255, 0.04)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent); }
+.sx-main { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 9px 76px 9px 12px; border-radius: inherit; }
+.sx-main > svg { width: 17px; height: 17px; margin-top: 1px; color: color-mix(in srgb, var(--c) 70%, var(--n-dim)); flex: none; }
+.sx-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sx-t { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-s { font-size: 12px; line-height: 1.45; color: var(--n-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sx mark { background: color-mix(in srgb, var(--c) 34%, transparent); color: var(--n-ink); border-radius: 4px; padding: 0 2px; margin: 0 -2px; }
+.sx-m { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--n-faint); font-variant-numeric: tabular-nums; }
+.sx-p { color: var(--n-dim); font-weight: 500; letter-spacing: 0; }
+.sx-acts { position: absolute; right: 10px; top: 50%; translate: 0 -50%; display: flex; opacity: 0; pointer-events: none; transition: opacity 0.15s; background: rgba(28, 28, 32, 0.92); border-radius: 999px; }
+.sx-acts .n-ico.sm { width: 26px; height: 26px; }
+.sx-row.sel .sx-acts, .sx-row:hover .sx-acts { opacity: 1; pointer-events: auto; }
+.sx-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 10px 8px 18px; border-top: 1px solid var(--n-line); font-size: 11.5px; color: var(--n-faint); font-variant-numeric: tabular-nums; }
+.sx-status { flex: 1; }
+@keyframes fade { from { opacity: 0; } }
+@media (max-width: 680px) { .sx-bar { flex-wrap: wrap; row-gap: 8px; } .sx-in { flex-basis: 50%; } .sx-seg { order: 5; } }
+
 /* ---------- Meldung ---------- */
+.toast-a { margin-left: 12px; padding: 3px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-weight: 600; transition: background 0.2s; }
+.toast-a:hover { background: rgba(255, 255, 255, 0.24); }
 .toast { position: fixed; z-index: 60; left: 50%; bottom: 22px; translate: -50% 0; max-width: min(520px, calc(100vw - 32px)); padding: 10px 18px; border-radius: 18px; font-size: 12.5px; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {
-  .tile, .pane > * { animation: none; }
+  .tile, .pane > *, .sx-panel, .sx-back, .menu { animation: none; }
   .chip, .ev, .tile, .cal-d, button.row { transition-duration: 0.01ms !important; }
 }

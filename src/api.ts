@@ -47,6 +47,15 @@ export type Link = { view: "heute" } | { view: "kurs"; arg: number } | { view: "
 /** Lage der Notch in Fensterkoordinaten (nur wenn sie laeuft) */
 export type NotchRect = { dock: "top" | "left" | "right"; x: number; y: number; w: number; h: number };
 
+/** Treffer der Suche: eine Datei (mit den besten Seiten) oder ein Name aus LearnWeb; Ausschnitt mit \u0001 … \u0002 um die Treffer, kein HTML */
+export type HitKind = "course" | "section" | "activity" | "pdf" | "docx" | "pptx";
+export type Hit = { kind: HitKind; course: number; cmid: number | null; path: string; title: string; pages: number[]; snippet: string; file: number | null; count: number };
+export type Found = { hits: Hit[]; ms: number; indexed: boolean; words: string[] };
+export type Outline = { text: string; chars: number; truncated: boolean };
+export type Fetched = { files: number; skipped: number };
+/** code: too_large | locked | login | learnweb | network | credentials | start */
+export type FetchError = { code: string; message: string };
+
 export const api = {
   overview: () => invoke<Overview>("overview"),
   course: (id: number) => invoke<CourseView>("course", { id }),
@@ -59,5 +68,15 @@ export const api = {
   openWeb: (course: number, cmid?: number) => invoke<void>("open_web", { course, cmid: cmid ?? null }),
   openNote: (course: number) => invoke<void>("open_note", { course }),
   openFolder: (course: number) => invoke<void>("open_folder", { course }),
+  /** _Verzeichnis.md in Obsidian */
+  openDirectory: () => invoke<void>("open_directory"),
+  /** courses leer = alle Kurse; deep = tiefe Suche (Wortstaemme, ODER, nach Dichte) */
+  search: (q: string, deep: boolean, courses: number[]) => invoke<Found>("search", { q, deep, courses }),
+  /** Markdown fuer Claude/ChatGPT: ohne Kurs das ganze Verzeichnis, sonst ein Kurs (mit withText samt Text der Dateien) */
+  forAi: (course: number | null, withText: boolean) => invoke<Outline>("for_ai", { course, withText }),
+  /** Datei als Datei in die Zwischenablage */
+  copyFile: (course: number, cmid: number, idx: number) => invoke<void>("copy_file", { course, cmid, idx }),
+  /** Sofort laden; allSizes = auch Dateien, die zu gross zum Spiegeln waren. Fehler: FetchError */
+  fetch: (course: number, cmid: number, allSizes: boolean) => invoke<Fetched>("fetch", { course, cmid, allSizes }),
   takePending: () => invoke<Link | null>("take_pending"),
 };
