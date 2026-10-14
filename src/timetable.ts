@@ -405,6 +405,7 @@ ${time}` : ""}`;
     fact("kalender", `${DAYS[e.day]} · ${hm(e.start)}–${hm(e.end)}`);
     if (e.room) fact("pin", e.room);
     if (e.auto) { const li = fact("spark", "automatisch erkannt", "ti-new"); li.title = e.note ?? ""; }
+    if (c?.kind) fact("kursbuch", { vorlesung: "Vorlesung", seminar: "Seminar", uebung: "Übung" }[c.kind] ?? c.kind);
     if (c?.teacher) fact("user", c.teacher);
     if (c) {
       const next = this.o.nextOf(c.id);
