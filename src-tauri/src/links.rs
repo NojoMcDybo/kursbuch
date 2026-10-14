@@ -9,6 +9,8 @@ use serde::Serialize;
 #[serde(tag = "view", content = "arg", rename_all = "lowercase")]
 pub enum Link {
     Heute,
+    /// Fokus-Ansicht (Notch-Karte des Pomodoro: holt die App nach vorn)
+    Fokus,
     Kurs(i64),
     Suche(String),
 }
@@ -25,6 +27,7 @@ pub fn parse(url: &str) -> Option<Link> {
     };
     match (head.to_ascii_lowercase().as_str(), arg) {
         ("heute", None) => Some(Link::Heute),
+        ("fokus", None) => Some(Link::Fokus),
         ("kurs", Some(id)) if (1..=12).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit()) => id.parse().ok().map(Link::Kurs),
         ("suche", Some(q)) => {
             let q = percent_decode_str(q).decode_utf8().ok()?;
@@ -43,6 +46,7 @@ mod tests {
     fn valid_links() {
         assert_eq!(parse("kursbuch://heute"), Some(Link::Heute));
         assert_eq!(parse("kursbuch://heute/"), Some(Link::Heute));
+        assert_eq!(parse("kursbuch://fokus"), Some(Link::Fokus));
         assert_eq!(parse("KURSBUCH://Heute"), Some(Link::Heute));
         assert_eq!(parse("kursbuch://kurs/96952"), Some(Link::Kurs(96952)));
         assert_eq!(parse("kursbuch://kurs/96952/"), Some(Link::Kurs(96952)));

@@ -42,7 +42,7 @@ export type Ev = { id: string; ts: number; allDay: boolean; kind: EvKind; title:
 export type NewItem = { course: number; cmid: number; name: string; typ: string; file: number | null; ts: number; updated: boolean };
 
 /** Deep Link kursbuch://… */
-export type Link = { view: "heute" } | { view: "kurs"; arg: number } | { view: "suche"; arg: string };
+export type Link = { view: "heute" } | { view: "fokus" } | { view: "kurs"; arg: number } | { view: "suche"; arg: string };
 
 /** Lage der Notch in Fensterkoordinaten (nur wenn sie laeuft) */
 export type NotchRect = { dock: "top" | "left" | "right"; x: number; y: number; w: number; h: number };
@@ -62,6 +62,16 @@ export type Plans = Record<string, Entry[]>;
 export type Imported = { entries: Entry[]; skipped: number };
 /** LearnWeb-Anmeldung: gespeichert (Kennung) und ob gerade ein Sync laeuft */
 export type Account = { saved: boolean; user: string | null; running: boolean };
+
+/** Fokus: To-do-Listen, Pomodoro-Einstellungen (Minuten) und Lernstreaks (Rust: focus.rs) */
+export type Todo = { id: string; text: string; done: boolean };
+export type TodoList = { id: string; name: string; items: Todo[] };
+export type FocusSettings = { focus: number; pause: number };
+/** days: (Tag seit 1970 im lokalen Kalender, Sitzungen) der letzten 12 Wochen; today_day = heute im selben Mass */
+export type FocusStats = { current: number; best: number; today: number; today_minutes: number; total: number; days: [number, number][]; today_day: number };
+export type Focus = { lists: TodoList[]; settings: FocusSettings; stats: FocusStats };
+/** Stand des Pomodoro fuer die Karte in der Notch (Rust: pomodoro.rs) */
+export type PomoNotch = { phase: "focus" | "short" | "long"; status: "running" | "paused" | "ready"; ends_at: number; left: number; total: number; task: string; round: number; rounds: number };
 
 export const api = {
   overview: () => invoke<Overview>("overview"),
@@ -95,5 +105,11 @@ export const api = {
   accountStatus: () => invoke<Account>("account_status"),
   accountLogin: (user: string, password: string) => invoke<void>("account_login", { user, password }),
   accountLogout: () => invoke<void>("account_logout"),
+  focusGet: () => invoke<Focus>("focus_get"),
+  focusSave: (lists: TodoList[], settings: FocusSettings) => invoke<void>("focus_save", { lists, settings }),
+  /** eine abgeschlossene Fokusphase festhalten; Rueckgabe: neue Zahlen */
+  focusLog: (minutes: number, task: string) => invoke<FocusStats>("focus_log", { minutes, task }),
+  /** Timer fuer die Notch; null = beendet */
+  pomodoroNotch: (state: PomoNotch | null) => invoke<void>("pomodoro_notch", { state }),
   takePending: () => invoke<Link | null>("take_pending"),
 };

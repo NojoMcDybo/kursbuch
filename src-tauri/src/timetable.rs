@@ -7,6 +7,7 @@
 
 use crate::data::{self, Paths};
 use crate::model::split_name;
+use crate::store;
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -64,11 +65,7 @@ fn file(paths: &Paths) -> PathBuf {
 }
 
 pub fn load(paths: &Paths) -> Result<Plans, String> {
-    match std::fs::read(file(paths)) {
-        Ok(b) => serde_json::from_slice(&b).map_err(|e| format!("Der Stundenplan ist nicht lesbar: {e}")),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Plans::new()),
-        Err(e) => Err(format!("Der Stundenplan ist nicht lesbar: {e}")),
-    }
+    store::read(&file(paths)).map(Option::unwrap_or_default).map_err(|e| format!("Der Stundenplan ist nicht lesbar: {e}"))
 }
 
 /// Eine Datei, die sich nicht lesen laesst, wird beiseitegelegt (timetable.json.defekt), statt von der naechsten
@@ -78,22 +75,13 @@ pub fn save(paths: &Paths, semester: &str, entries: Vec<Entry>) -> Result<(), St
     if semester.trim().is_empty() || semester.chars().count() > 40 {
         return Err("Semester ungültig.".into());
     }
-    let mut plans = match load(paths) {
-        Ok(p) => p,
-        Err(_) => {
-            let _ = std::fs::rename(file(paths), paths.config.join("timetable.json.defekt"));
-            Plans::new()
-        }
-    };
+    let mut plans: Plans = store::read_or_quarantine(&file(paths)).unwrap_or_default();
     if entries.is_empty() {
         plans.remove(semester);
     } else {
         plans.insert(semester.to_string(), entries);
     }
-    std::fs::create_dir_all(&paths.config).map_err(|e| e.to_string())?;
-    let tmp = paths.config.join("timetable.json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&plans).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, file(paths)).map_err(|e| e.to_string())
+    store::write(&file(paths), &plans)
 }
 
 // --------------------------------------------------------------------------- iCalendar schreiben

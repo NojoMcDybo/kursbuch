@@ -8,6 +8,47 @@ import { api, type Account as Status } from "./api";
 import { ago } from "./dates";
 import { el, ico, iconBtn, message, toast } from "./ui";
 
+/** Anmeldeformular (Kennung, Passwort): im Konto-Menue und auf dem Anmeldebild. `onDone` nach geglueckter Anmeldung. */
+export function loginForm(onDone: () => void): HTMLFormElement {
+  const form = el("form", "ap-f");
+  form.autocomplete = "off";
+  form.noValidate = true;
+  const user = el("input", "n-input");
+  user.placeholder = "Uni-Kennung";
+  user.autocomplete = "username";
+  user.setAttribute("aria-label", "Uni-Kennung");
+  user.maxLength = 64;
+  const pw = el("input", "n-input");
+  pw.type = "password";
+  pw.placeholder = "Passwort";
+  pw.autocomplete = "off";
+  pw.setAttribute("aria-label", "Passwort");
+  const err = el("p", "ap-err");
+  const go = el("button", "n-btn primary", "Anmelden");
+  go.type = "submit";
+  form.append(user, pw, err, go);
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!user.value.trim() || !pw.value) { err.textContent = "Kennung und Passwort eintragen."; return; }
+    const password = pw.value;
+    pw.value = ""; // das Passwort verlaesst die Oberflaeche sofort
+    err.textContent = "";
+    go.disabled = user.disabled = pw.disabled = true;
+    go.textContent = "Prüfe …";
+    api.accountLogin(user.value.trim(), password)
+      .then(() => { toast("Angemeldet"); onDone(); })
+      .catch((e) => { err.textContent = message(e); go.disabled = user.disabled = pw.disabled = false; go.textContent = "Anmelden"; pw.focus(); });
+  });
+  return form;
+}
+
+export type AccountOpts = {
+  /** Anmeldung oder Abmeldung ist geschehen: Daten neu holen */
+  onChange: () => void;
+  /** Stand der gespeicherten Zugangsdaten (nach jeder Abfrage) */
+  onStatus: (saved: boolean) => void;
+};
+
 export class Account {
   readonly el = iconBtn("user", "LearnWeb-Konto", "n-ico sm n-glass n-liquid acct", () => this.toggle());
   private dot = el("i", "acct-dot off");
@@ -15,10 +56,9 @@ export class Account {
   private status: Status | null = null;
   private lastRun: number | null = null;
 
-  constructor(private onChange: () => void) {
+  constructor(private o: AccountOpts) {
     this.el.append(this.dot);
     this.el.setAttribute("aria-haspopup", "dialog");
-    void this.refresh();
   }
 
   /** Zeitpunkt des letzten Syncs (aus der Uebersicht) */
@@ -30,6 +70,7 @@ export class Account {
 
   async refresh() {
     this.status = await api.accountStatus().catch(() => null);
+    if (this.status) this.o.onStatus(this.status.saved);
     this.paintDot();
     if (this.pop) this.draw();
   }
@@ -81,43 +122,16 @@ export class Account {
       const out = el("button", "n-btn", "Abmelden");
       out.addEventListener("click", () => {
         out.disabled = true;
-        api.accountLogout().then(() => { toast("Abgemeldet"); return this.refresh(); }).then(() => this.onChange()).catch((e) => toast(message(e))).finally(() => { out.disabled = false; });
+        api.accountLogout().then(() => { toast("Abgemeldet"); return this.refresh(); }).then(() => this.o.onChange()).catch((e) => toast(message(e))).finally(() => { out.disabled = false; });
       });
       pop.replaceChildren(head, out);
       return;
     }
-    const form = el("form", "ap-f");
-    form.autocomplete = "off";
-    form.noValidate = true;
-    const user = el("input", "n-input");
-    user.placeholder = "Uni-Kennung";
-    user.autocomplete = "username";
-    user.setAttribute("aria-label", "Uni-Kennung");
-    user.maxLength = 64;
-    const pw = el("input", "n-input");
-    pw.type = "password";
-    pw.placeholder = "Passwort";
-    pw.autocomplete = "off";
-    pw.setAttribute("aria-label", "Passwort");
-    const err = el("p", "ap-err");
-    const go = el("button", "n-btn primary", "Anmelden");
-    go.type = "submit";
+    const form = loginForm(() => { void this.refresh().then(() => this.o.onChange()); });
     const head = el("div", "ap-t");
     head.append(ico("lock"), el("span", "", "LearnWeb"));
-    form.append(head, user, pw, err, go);
-    form.addEventListener("submit", (ev) => {
-      ev.preventDefault();
-      if (!user.value.trim() || !pw.value) { err.textContent = "Kennung und Passwort eintragen."; return; }
-      const password = pw.value;
-      pw.value = ""; // das Passwort verlaesst die Oberflaeche sofort
-      err.textContent = "";
-      go.disabled = user.disabled = pw.disabled = true;
-      go.textContent = "Prüfe …";
-      api.accountLogin(user.value.trim(), password)
-        .then(() => { toast("Angemeldet"); this.onChange(); return this.refresh(); })
-        .catch((e) => { err.textContent = message(e); go.disabled = user.disabled = pw.disabled = false; go.textContent = "Anmelden"; pw.focus(); });
-    });
+    form.prepend(head);
     pop.replaceChildren(form);
-    user.focus();
+    form.querySelector<HTMLInputElement>("input")?.focus();
   }
 }

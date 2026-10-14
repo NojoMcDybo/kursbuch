@@ -48,7 +48,8 @@ pub async fn open_course(app: AppHandle, paths: State<'_, Paths>, course: i64, c
     }
     WebviewWindowBuilder::new(&app, &id, WebviewUrl::App(url(course, &t).into()))
         .title(split_name(&c.name).title)
-        .inner_size(820.0, 900.0)
+        .inner_size(1100.0, 900.0)
+        .maximized(true) // „Vollbild“: das Kursfenster fuellt den Bildschirm (ohne Leiste)
         .min_inner_size(520.0, 480.0)
         .decorations(false)
         .background_color(Color(28, 28, 30, 255))

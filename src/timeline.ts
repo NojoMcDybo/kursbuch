@@ -320,7 +320,7 @@ export class Timeline {
           lanes.set(d, lane + 1);
           (n.lastElementChild as HTMLElement).textContent = important && w >= 64 ? shortTitle(ev.short) : "";
           n.style.width = `${Math.max(20, w - 6)}px`;
-          n.style.transform = `translate(${x1 + 3}px, ${this.axis - 16 - (lane + 1) * 24}px)`;
+          n.style.translate = `${x1 + 3}px ${this.axis - 16 - (lane + 1) * 24}px`;
           n.classList.toggle("lean", !important);
         }
       } else if (visible) {
@@ -329,7 +329,7 @@ export class Timeline {
         const cx = (x1 + x2) / 2;
         const level = Math.min(3, dotsAt.filter((p) => Math.abs(p - cx) < 12).length);
         dotsAt.push(cx);
-        n.style.transform = `translate(${cx - 8}px, ${this.axis - 24 - level * 15}px)`;
+        n.style.translate = `${cx - 8}px ${this.axis - 24 - level * 15}px`;
       }
       n.hidden = !visible;
     }

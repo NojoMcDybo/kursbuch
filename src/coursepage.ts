@@ -22,6 +22,7 @@ export class CoursePage {
   private busy = new Set<number>();
 
   constructor(readonly id: number, private onView: (v: CourseView) => void) {
+    this.head.dataset.tauriDragRegion = "";
     this.el.append(this.head, this.body);
     this.el.style.setProperty("--h", "215");
   }
@@ -72,7 +73,12 @@ export class CoursePage {
     const folder = iconBtn("folder", "Ordner", "n-ico sm n-glass n-liquid", () => act(api.openFolder(v.id)));
     const acts = el("div", "p-acts");
     acts.append(ai, web, note, folder);
-    this.head.replaceChildren(acts);
+    // Titel links (zieht das Fenster), Aktionen rechts; rechts daneben schwebt die Fensterpille
+    const drag = (e: HTMLElement) => { e.dataset.tauriDragRegion = ""; return e; };
+    const lead = drag(el("div", "cw-lead"));
+    const sub = [v.teacher, v.semester].filter(Boolean).join(" · ");
+    lead.append(drag(el("i", "cw-dot")), drag(el("h1", "cw-title", v.title)), ...(sub ? [drag(el("span", "cw-sub", sub))] : []));
+    this.head.replaceChildren(lead, acts);
   }
 
   private fillBody(v: CourseView) {

@@ -13,6 +13,8 @@
 //! - timetable.rs: Stundenplan (eigene Eintraege je Semester, Import/Export als .ics)
 //! - account.rs: LearnWeb-Anmeldung ueber die Python-Seite (Zugangsdaten im Windows-Tresor, nie in der App)
 //! - windows.rs: Kurse in eigenen Fenstern (`kurs-<id>`)
+//! - focus.rs:  To-do-Listen, Pomodoro-Einstellungen, Lernstreaks (focus.json); pomodoro.rs: der Timer als Live Activity der Notch
+//! - store.rs:  kleine JSON-Ablage im App-Ordner
 //! - links.rs:  Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff> (nur navigieren)
 //!
 //! Die App kennt keine Passwoerter und spricht nie mit LearnWeb: Nur die Python-Seite (learnweb-mcp) tut das.
@@ -22,13 +24,16 @@ mod colors;
 mod data;
 mod events;
 mod fetch;
+mod focus;
 mod links;
 mod model;
 mod notch;
 mod open;
+mod pomodoro;
 mod py;
 mod search;
 mod share;
+mod store;
 mod timetable;
 mod visits;
 mod windows;
@@ -130,6 +135,10 @@ pub fn run() {
             account::account_status,
             account::account_login,
             account::account_logout,
+            focus::focus_get,
+            focus::focus_save,
+            focus::focus_log,
+            pomodoro::pomodoro_notch,
         ])
         .setup(|app| {
             let h = app.handle().clone();
@@ -137,6 +146,7 @@ pub fn run() {
             h.manage(visits::Visits::load(&paths));
             h.manage(paths);
             notch::spawn(h.clone());
+            pomodoro::spawn(h.clone());
             // Schema kursbuch:// fuer diesen Benutzer anmelden (der Installer tut es auch; so klappt es auch im Test)
             #[cfg(desktop)]
             let _ = app.deep_link().register_all();
@@ -155,6 +165,7 @@ pub fn run() {
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
                 notch::shutdown(); // Karte in der Notch wegraeumen
+                pomodoro::shutdown();
             }
         });
 }

@@ -21,7 +21,7 @@ const ICON_SVG: &str = include_str!("../../src/nojo/icons/kursbuch.svg");
 static SENT: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
 
-fn request(method: &str, path: &str, body: &str, ms: u64) -> std::io::Result<String> {
+pub fn request(method: &str, path: &str, body: &str, ms: u64) -> std::io::Result<String> {
     let addr = SocketAddr::from(([127, 0, 0, 1], 47800));
     let t = Duration::from_millis(ms);
     let mut s = TcpStream::connect_timeout(&addr, t)?;
@@ -35,6 +35,19 @@ fn request(method: &str, path: &str, body: &str, ms: u64) -> std::io::Result<Str
     let mut buf = [0u8; 128];
     let n = s.read(&mut buf).unwrap_or(0);
     Ok(String::from_utf8_lossy(&buf[..n]).into_owned())
+}
+
+/// GET mit der ganzen Antwort (Kopf und Rumpf, hoechstens 64 KB): fuer Listen wie /events
+pub fn fetch(path: &str, ms: u64) -> std::io::Result<String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], 47800));
+    let t = Duration::from_millis(ms);
+    let mut s = TcpStream::connect_timeout(&addr, t)?;
+    s.set_read_timeout(Some(t))?;
+    s.set_write_timeout(Some(t))?;
+    write!(s, "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")?;
+    let mut out = Vec::new();
+    s.take(64 * 1024).read_to_end(&mut out)?;
+    Ok(String::from_utf8_lossy(&out).into_owned())
 }
 
 fn running() -> bool {

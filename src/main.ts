@@ -10,13 +10,15 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { glassLight, liquid, segments, windowControls } from "./nojo/nojo-ui";
 import { api, type Ev, type Link, type NewItem, type Overview } from "./api";
 import { Abgaben } from "./abgaben";
-import { Account } from "./account";
+import { Account, loginForm } from "./account";
 import { Calendar } from "./calendar";
 import { Courses } from "./courses";
 import { mountCourseWindow } from "./coursewin";
 import { todayDay } from "./dates";
+import { FocusScene } from "./focus";
 import { Fog } from "./fog";
 import { applyNotch, watchNotch } from "./notch-align";
+import { initGrab, isAlone, isFocus, isLocked, setAlone, setFocus, setLocked } from "./scene";
 import { isSearchKey, Search } from "./search";
 import { Timeline } from "./timeline";
 import { Timetable } from "./timetable";
@@ -33,6 +35,12 @@ let courses: Courses;
 let tt: Timetable;
 let account: Account;
 let search: Search;
+let focus: FocusScene;
+
+const KEY_LOGIN = "kursbuch-login";
+/** Farben des Anmeldebilds (es gibt noch keine Kurse, nach denen sich der Nebel richten koennte) */
+const LOGIN_HUES = ["#6f8cff", "#bf5af2", "#ff6a88", "#30d1c0"];
+const PHASE_HUES: Record<string, string[]> = { focus: ["#ffb09b", "#ff7a85", "#ffd08a"], short: ["#8fdcbc", "#5ec9d8", "#a8e6a1"], long: ["#8fdcbc", "#5ec9d8", "#a8e6a1"] };
 
 /** Semester-Segmente im Kopf: die zwei neuesten, die aelteren hinter „…“ (dort steht dann der gewaehlte Name) */
 function renderSems() {
@@ -71,9 +79,26 @@ function semesterChanged() {
   tt.setSemester(courses.semester);
 }
 
-/** Nebel in den Farben des Semesters */
+/** Nebel: im Anmeldebild bunt, beim Timer in der Farbe der Phase (Pfirsich = Fokus, Mint = Pause), sonst in den Farben des Semesters */
 function tint() {
-  fog.setColors(courses.hues().map((h) => hueHex(h)));
+  const phase = document.body.dataset.phase ?? "idle";
+  const hues = isLocked() ? LOGIN_HUES : isAlone() && PHASE_HUES[phase] ? PHASE_HUES[phase] : courses.hues().map((h) => hueHex(h));
+  fog.setColors(hues);
+  document.body.classList.toggle("vivid", isLocked() || isFocus() || isAlone());
+}
+
+function scenesChanged() {
+  renderSems();
+  tint();
+}
+
+/** Zugangsdaten gespeichert oder nicht: Anmeldebild bzw. die Ansicht. Beim Abmelden endet auch ein laufender Timer. */
+function loginState(saved: boolean) {
+  try { localStorage.setItem(KEY_LOGIN, saved ? "1" : "0"); } catch { /* egal */ }
+  if (!saved && focus?.pomo.active) focus.pomo.stop();
+  setLocked(!saved);
+  if (saved) void refresh();
+  scenesChanged();
 }
 
 function renderAll() {
@@ -105,6 +130,7 @@ async function refresh() {
 async function go(l: Link) {
   if (l.view === "kurs") act(api.openCourse(l.arg));
   else if (l.view === "suche") search.open(l.arg);
+  else if (l.view === "fokus") { if (!isLocked() && !isAlone()) setFocus(true); scenesChanged(); }
   else if (l.view === "heute") {
     tl.today();
     cal.pick(todayDay());
@@ -136,7 +162,11 @@ async function main() {
   const open = (id: number) => act(api.openCourse(id));
   const nextOf = (id: number) => events.filter((e) => e.course === id && e.ts >= Date.now() / 1000 - 3600).sort((a, b) => a.ts - b.ts)[0];
 
-  account = new Account(() => { signature = ""; void refresh(); });
+  // gemerkter Stand: wer zuletzt angemeldet war, sieht sofort die Ansicht (die Pruefung folgt im Hintergrund)
+  let cached = false;
+  try { cached = localStorage.getItem(KEY_LOGIN) === "1"; } catch { /* egal */ }
+  if (!cached) document.body.classList.add("locked");
+  account = new Account({ onChange: () => { signature = ""; void refresh(); }, onStatus: loginState });
   q("#acct-host").replaceWith(account.el);
   courses = new Courses({ onOpen: open, onRead: () => void refresh() });
   tl = new Timeline({ hueOf, nameOf, onOpen: open });
@@ -162,6 +192,24 @@ async function main() {
   document.body.append(search.el);
   q(".find").addEventListener("click", () => search.open());
 
+  // Szenen hinter der dunklen Flaeche: Anmeldebild und Fokus-Ansicht
+  const lg = el("section", "lg");
+  const card = el("div", "lg-card n-glass n-liquid panel");
+  const brand = el("div", "lg-brand");
+  brand.append(ico("kursbuch", 30), el("b", "", "Kursbuch"), el("span", "", "mit LearnWeb anmelden"));
+  card.append(brand, loginForm(() => void account.refresh()));
+  lg.append(card);
+  focus = new FocusScene((on) => { void setAlone(on).then(scenesChanged); });
+  let lastPhase = "";
+  focus.pomo.subscribe(() => { // Farbe des Nebels folgt der Phase des Timers
+    const k = focus.pomo.status === "idle" ? "idle" : focus.pomo.phase;
+    if (k !== lastPhase) { lastPhase = k; if (isAlone()) tint(); }
+  });
+  lg.dataset.tauriDragRegion = "";
+  q("#scene").append(lg, focus.el);
+  initGrab(q(".sheet"), q(".grab"), scenesChanged);
+  q(".fbtn").addEventListener("click", () => { setFocus(!isFocus()); scenesChanged(); });
+
   q("#tl-host").append(tl.el);
   q("#slot-l").append(courses.el);
   q("#slot-c").append(tt.el);
@@ -185,13 +233,16 @@ async function main() {
   scrim.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => {
     if (isSearchKey(e)) { e.preventDefault(); search.open(); return; }
-    if (e.key === "Escape") { if (document.body.classList.contains("dr")) closeDrawer(); else if (document.body.classList.contains("full")) void setFull(false); }
+    if (e.key === "Escape") { if (document.body.classList.contains("dr")) closeDrawer(); else if (isFocus() && !isAlone()) { setFocus(false); scenesChanged(); } else if (document.body.classList.contains("full")) void setFull(false); }
     if (e.key === "F11") { e.preventDefault(); void setFull(!document.body.classList.contains("full")); }
   });
 
   watchNotch([(cb) => void win.onResized(cb).catch(() => {}), (cb) => void win.onMoved(cb).catch(() => {})]);
+  void account.refresh(); // Zugangsdaten-Stand (Anmeldebild oder Ansicht)
   await refresh();
+  tint();
   applyNotch();
+  if (focus.pomo.active) void setAlone(true).then(scenesChanged); // ein laufender Timer ueberlebt ein Neuladen
 
   await listen<Link>("open-link", (e) => { void api.takePending(); void go(e.payload); });
   const pending = await api.takePending().catch(() => null);

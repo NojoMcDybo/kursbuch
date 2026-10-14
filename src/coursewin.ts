@@ -1,6 +1,6 @@
 /**
- * Kursfenster (`index.html?kurs=<id>`, geoeffnet von Rust: windows.rs): oben der Kurs als Titelleiste mit Fensterknoepfen, darunter
- * die Seite des Kurses auf einer Flaeche mit runden oberen Ecken wie im Hauptfenster. Ein zweiter Klick auf denselben Kurs
+ * Kursfenster (`index.html?kurs=<id>`, geoeffnet von Rust: windows.rs, maximiert): ohne Leiste, die Seite des Kurses fuellt das ganze
+ * Fenster; die Fensterpille (Minimieren, Maximieren, Schliessen) schwebt oben rechts. Ein zweiter Klick auf denselben Kurs
  * schickt „reveal“ (Aktivitaet oder Abschnitt zeigen). Das Design der Kursseite wird spaeter noch einmal besprochen.
  */
 
@@ -8,8 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { glassLight, liquid, windowControls } from "./nojo/nojo-ui";
 import { CoursePage, type Target } from "./coursepage";
-import { Fog } from "./fog";
-import { el, hueHex, toast } from "./ui";
+import { el, toast } from "./ui";
 
 export async function mountCourseWindow(id: number, target: Target) {
   document.body.classList.add("cwin");
@@ -26,35 +25,17 @@ export async function mountCourseWindow(id: number, target: Target) {
     close: () => void win.close().catch(() => {}),
   });
 
-  const fog = new Fog();
-  document.body.prepend(fog.el);
-  const dot = el("i", "cw-dot");
-  const title = el("h1", "cw-title");
-  const sub = el("span", "cw-sub");
-  const top = el("header", "top");
-  top.dataset.tauriDragRegion = "";
-  const lead = el("div", "cw-lead");
-  lead.dataset.tauriDragRegion = "";
-  lead.append(dot, title, sub);
-  top.append(lead);
-
-  const page = new CoursePage(id, (v) => {
-    title.textContent = v.title;
-    sub.textContent = [v.teacher, v.semester].filter(Boolean).join(" · ");
-    dot.style.setProperty("--h", String(v.hue));
-    document.title = v.title;
-    fog.setColors([hueHex(v.hue)]);
-  });
+  // keine Leiste: die Kursseite fuellt das ganze Fenster; Titel und Aktionen stehen in ihrem Kopf, die Fensterpille schwebt darueber
+  const page = new CoursePage(id, (v) => { document.title = v.title; });
   const sheet = el("main", "sheet cw");
   sheet.append(page.el);
-  document.body.append(top, sheet);
+  document.body.append(sheet);
   glassLight();
   liquid();
   void syncWindow();
   void win.onResized(() => void syncWindow()).catch(() => {});
 
   if (!(await page.load())) {
-    title.textContent = "Kurs nicht gefunden";
     toast("Kurs nicht gefunden");
     return;
   }

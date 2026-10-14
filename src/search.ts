@@ -112,6 +112,8 @@ export class Search {
   private panel = el("div", "sx-panel n-glass n-liquid panel");
   private shade = el("div", "sx-back");
   private closing = false;
+  /** Mauszeiger und Mauslicht sind weg, solange man tippt; eine echte Mausbewegung (ab 6 px) holt sie zurueck */
+  private pos: [number, number] | null = null;
 
   constructor(private o: SearchOpts) {
     try {
@@ -139,6 +141,8 @@ export class Search {
     this.shade.addEventListener("pointerdown", () => this.close());
     this.el.append(this.shade, panel);
     this.drawSegs();
+    this.el.addEventListener("pointermove", (e) => this.nudge(e));
+    this.el.addEventListener("keydown", () => this.quiet(true), true);
     this.input.addEventListener("input", () => this.schedule());
     this.input.addEventListener("keydown", (e) => this.key(e));
     this.el.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); this.close(); } });
@@ -146,6 +150,17 @@ export class Search {
   }
 
   get isOpen() { return !this.el.hidden; }
+
+  private quiet(on: boolean) {
+    this.el.classList.toggle("quiet", on);
+    if (on) this.pos = null;
+  }
+
+  private nudge(e: PointerEvent) {
+    if (!this.el.classList.contains("quiet")) return;
+    if (!this.pos) { this.pos = [e.clientX, e.clientY]; return; } // erste Meldung (auch vom Layout ausgeloest): nur merken
+    if (Math.hypot(e.clientX - this.pos[0], e.clientY - this.pos[1]) >= 6) this.quiet(false);
+  }
 
   private get kids() { return [...this.panel.children] as HTMLElement[]; }
 
@@ -156,6 +171,7 @@ export class Search {
     this.el.hidden = false;
     this.drawSegs();
     if (fresh) {
+      this.quiet(true); // beim Aufgehen verschwindet der Mauszeiger, damit der Text frei lesbar bleibt
       this.o.onToggle?.(true);
       this.shade.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
       void morph(this.panel, this.o.anchor()?.getBoundingClientRect() ?? null, this.kids, true);
