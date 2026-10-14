@@ -14,6 +14,16 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text
 /** Symbol aus der Nojo-Bibliothek als Element */
 export const ico = (name: IconName, size?: number) => iconNode(name, size ? { size } : {});
 
+/** Symbolknopf (nur Symbol, Hinweis als Tooltip und fuer Screenreader) */
+export function iconBtn(name: IconName, title: string, cls = "n-ico sm", run?: () => void) {
+  const b = el("button", cls);
+  b.title = title;
+  b.setAttribute("aria-label", title);
+  b.append(ico(name));
+  if (run) b.addEventListener("click", run);
+  return b;
+}
+
 /** Platzhalter <i data-icon="…"> im HTML durch das Symbol ersetzen */
 export function fillIcons(root: ParentNode = document) {
   root.querySelectorAll<HTMLElement>("[data-icon]").forEach((p) => {
@@ -43,4 +53,17 @@ export function act(p: Promise<unknown>) {
   p.catch((e) => toast(message(e)));
 }
 
-export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** Farbe eines Kurses aus seinem Farbton (gleiche Formel wie die Notch-Karte in Rust: hsl(Ton 68% 62%)) */
+export const hsl = (hue: number, a = 1, l = 62) => `hsl(${hue} 68% ${l}% / ${a})`;
+
+/** Hex-Farbe zu einem Farbton (fuer den Nebel) */
+export function hueHex(hue: number, s = 0.74, l = 0.56) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(hue / 60) % 6];
+  return "#" + [r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join("");
+}
+
+/** „WiSe 2026/27“ -> „WiSe 26/27“, „SoSe 2026“ -> „SoSe 26“ */
+export const shortSem = (s: string) => s.replace(/(\d{2})(\d{2})/g, "$2");

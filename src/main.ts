@@ -1,51 +1,40 @@
 /**
- * Kursbuch — LearnWeb-Kurse, Fristen und Suche.
- *
- * - Heute:  Fristen und Neues (Phase 3, bisher Huelle)
- * - Kurse:  Raster nach Semester, darin die Kursansicht (kurse.ts)
- * - Suche:  Volltext (Phase 3, bisher Huelle); Strg+K springt hierher
- * Die App liest nur lokale Daten (Stand der Python-Seite). Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff>.
+ * Kursbuch — LearnWeb im Nojo-Oekosystem, ein Dashboard ueber die ganze Fensterbreite:
+ * Zeitstrahl oben (Fischauge, scrollbar), links Kalender, in der Mitte die Kurse des gewaehlten Semesters (Chips zum
+ * schnellen Wechsel, geoeffnete Kurse als fortlaufende Seiten nebeneinander), rechts Fristen und Neues. Die Notch
+ * bekommt ihre Zone im Kopf frei (notch-align.ts). Daten sind lokal (Python-Seite); Deep Link kursbuch://heute | kurs/<id>.
  */
 
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { glassLight, lightScroller, liquid, segments, windowControls } from "./nojo/nojo-ui";
-import { api, type Link, type Overview } from "./api";
-import { initCourses, openCourse, renderCourses, showGrid } from "./kurse";
-import { fillIcons, q } from "./ui";
+import { glassLight, liquid, segments, windowControls } from "./nojo/nojo-ui";
+import { api, type Ev, type Link, type NewItem, type Overview } from "./api";
+import { Agenda } from "./agenda";
+import { Calendar } from "./calendar";
+import { Courses } from "./courses";
+import { dayOfTs, todayDay } from "./dates";
+import { Fog } from "./fog";
+import { applyNotch, watchNotch } from "./notch-align";
+import { Side } from "./side";
+import { Timeline } from "./timeline";
+import { el, fillIcons, hueHex, ico, q, shortSem, toast } from "./ui";
 
-type View = "heute" | "kurse" | "suche";
-const VIEWS: View[] = ["heute", "kurse", "suche"];
-let view: View = "kurse";
+let events: Ev[] = [];
+let news: NewItem[] = [];
 let signature = "";
-
-function setView(v: View) {
-  if (v === "kurse" && view === "kurse") showGrid(); // Reiter nochmal antippen = zurueck zum Raster
-  view = v;
-  document.querySelectorAll<HTMLElement>(".view").forEach((s) => { s.hidden = s.dataset.view !== v; });
-  document.querySelectorAll<HTMLButtonElement>(".tabs button").forEach((b) => {
-    const on = b.dataset.view === v;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-selected", String(on));
-  });
-  q("#main").scrollTop = 0;
-  try { localStorage.setItem("kursbuch-view", v); } catch { /* egal */ }
-  if (v === "suche") q<HTMLInputElement>(".search").focus();
-}
-
-function go(l: Link) {
-  if (l.view === "heute") setView("heute");
-  else if (l.view === "suche") { setView("suche"); q<HTMLInputElement>(".search").value = l.arg; }
-  else { setView("kurse"); void openCourse(l.arg); }
-}
-
-// ---------- Stand ----------
+let fog: Fog;
+let tl: Timeline;
+let cal: Calendar;
+let agenda: Agenda;
+let side: Side;
+let courses: Courses;
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
 /** „heute 13:40“, „gestern 07:15“, „12.10. 07:15“ */
 function when(unix: number) {
-  const d = new Date(unix * 1000), now = new Date();
-  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000);
+  const d = new Date(unix * 1000);
+  const days = todayDay() - dayOfTs(unix);
   const t = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   return days === 0 ? `heute ${t}` : days === 1 ? `gestern ${t}` : `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${t}`;
 }
@@ -55,18 +44,61 @@ function renderSync(o: Overview) {
   const age = o.last_run ? Date.now() / 1000 - o.last_run : Infinity;
   s.classList.toggle("ok", age < 36 * 3600);
   s.classList.toggle("wait", age >= 36 * 3600);
-  q(".sync-t").textContent = o.last_run ? when(o.last_run) : "kein Sync";
-  s.title = o.last_run ? `Letzter Sync: ${when(o.last_run)}` : "Noch kein Sync gelaufen";
+  q(".sync-t").textContent = o.last_run ? when(o.last_run) : "–";
+  s.title = o.last_run ? `Letzter Sync: ${when(o.last_run)}` : "Noch kein Sync";
 }
 
-/** Stand von Rust holen; nur bei Aenderung neu zeichnen (Fenster bekommt oft den Fokus, die Ansicht soll dabei stehen bleiben) */
+/** Semester-Segmente im Kopf (kurze Namen, „Weitere“ als Symbol) */
+function renderSems() {
+  const nav = q(".sems");
+  const list = courses.semesters();
+  nav.hidden = list.length < 2;
+  nav.replaceChildren(...list.map((s) => {
+    const b = el("button", s === courses.semester ? "active" : "");
+    b.setAttribute("aria-pressed", String(s === courses.semester));
+    b.title = s;
+    if (s === "Weitere") b.append(ico("more")); else b.textContent = shortSem(s);
+    b.addEventListener("click", () => courses.setSemester(s));
+    return b;
+  }));
+}
+
+/** Nebel in den Farben der geoeffneten Kurse (sonst des Semesters) */
+function tint() {
+  const { base, open } = courses.hues();
+  fog.setColors(base.map((h) => hueHex(h)), open.map((h) => hueHex(h)));
+}
+
+function renderAll() {
+  tl.setEvents(events);
+  cal.setEvents(events);
+  agenda.render(events);
+  side.render(events, news);
+  tl.refresh();
+}
+
+/** Stand von Rust holen; nur bei Aenderung neu zeichnen (das Fenster bekommt oft den Fokus, die Ansicht bleibt dabei stehen) */
 async function refresh() {
   const o = await api.overview().catch((e): Overview => ({ status: "error", error: typeof e === "string" ? e : "Der Stand von LearnWeb lässt sich nicht lesen.", last_run: null, courses: [] }));
-  const sig = JSON.stringify(o);
+  const [ev, nw] = await Promise.all([api.events().catch(() => [] as Ev[]), api.news().catch(() => [] as NewItem[])]);
+  const sig = JSON.stringify([o, ev, nw]);
   if (sig === signature) return;
   signature = sig;
+  events = ev;
+  news = nw;
   renderSync(o);
-  renderCourses(o);
+  courses.setOverview(o);
+  renderSems();
+  renderAll();
+  tint();
+}
+
+async function go(l: Link) {
+  if (l.view === "kurs") { if (!(await courses.open(l.arg))) toast("Kurs nicht gefunden"); }
+  else if (l.view === "heute") {
+    tl.today();
+    cal.pick(todayDay());
+  }
 }
 
 // ---------- Start ----------
@@ -74,38 +106,69 @@ async function refresh() {
 async function main() {
   fillIcons();
   const win = getCurrentWindow();
-  const syncWindow = async () => document.body.classList.toggle("max", !!(await win.isMaximized().catch(() => false)));
+  const syncWindow = async () => {
+    const [max, full] = await Promise.all([win.isMaximized().catch(() => false), win.isFullscreen().catch(() => false)]);
+    document.body.classList.toggle("max", !!max);
+    document.body.classList.toggle("full", !!full);
+  };
+  const setFull = async (on: boolean) => { await win.setFullscreen(on).catch(() => {}); await syncWindow(); };
   windowControls({
     minimize: () => void win.minimize().catch(() => {}),
-    toggleMaximize: () => void win.toggleMaximize().catch(() => {}),
+    toggleMaximize: () => void (document.body.classList.contains("full") ? setFull(false) : win.toggleMaximize().catch(() => {})),
     close: () => void win.close().catch(() => {}),
   });
+
+  fog = new Fog();
+  document.body.prepend(fog.el);
+
+  const hueOf = (id: number | null) => courses.hueOf(id);
+  const nameOf = (id: number | null) => courses.nameOf(id);
+  const open = (id: number) => void courses.open(id);
+  courses = new Courses({
+    nextOf: (id) => events.filter((e) => e.course === id && e.ts >= Date.now() / 1000 - 3600).sort((a, b) => a.ts - b.ts)[0],
+    onChange: () => { renderSems(); tint(); },
+  });
+  tl = new Timeline({ hueOf, nameOf, onOpen: open });
+  cal = new Calendar({ hueOf, nameOf, onOpen: open, onPick: (day) => tl.focusDay(day) });
+  agenda = new Agenda({ hueOf, nameOf, onOpen: open });
+  side = new Side({ hueOf, nameOf, onOpen: open, onRead: () => void refresh() });
+  q("#tl-host").append(tl.el);
+  q("#slot-l").append(cal.el, agenda.el);
+  q("#slot-c").append(courses.el);
+  q("#slot-r").append(side.el);
+
   glassLight();
   liquid();
   segments(document, ".n-seg");
-  lightScroller(q("main"), { insetTop: 74 });
   void syncWindow();
   void win.onResized(() => void syncWindow()).catch(() => {});
 
-  initCourses(q('.view[data-view="kurse"]'));
-  document.querySelectorAll<HTMLButtonElement>(".tabs button").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view as View)));
+  // Seitenleisten als Schubladen in kleinen Fenstern
+  const scrim = q(".scrim");
+  const closeDrawers = () => { document.body.classList.remove("dl", "dr"); scrim.hidden = true; };
+  document.querySelectorAll<HTMLButtonElement>(".drawer").forEach((b) => b.addEventListener("click", () => {
+    const cls = b.dataset.drawer!;
+    const on = !document.body.classList.contains(cls);
+    closeDrawers();
+    document.body.classList.toggle(cls, on);
+    scrim.hidden = !on;
+  }));
+  scrim.addEventListener("click", closeDrawers);
   document.addEventListener("keydown", (e) => {
-    if (!e.ctrlKey || e.altKey) return;
-    if (e.key.toLowerCase() === "k") { e.preventDefault(); setView("suche"); }
-    else if (/^[1-3]$/.test(e.key)) { e.preventDefault(); setView(VIEWS[Number(e.key) - 1]); }
+    if (e.key === "Escape") { if (document.body.classList.contains("dl") || document.body.classList.contains("dr")) closeDrawers(); else if (document.body.classList.contains("full")) void setFull(false); }
+    if (e.key === "F11") { e.preventDefault(); void setFull(!document.body.classList.contains("full")); }
   });
-  q(".day").textContent = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
 
-  let start: View = "kurse";
-  try { const s = localStorage.getItem("kursbuch-view"); if (VIEWS.includes(s as View)) start = s as View; } catch { /* egal */ }
-  setView(start);
+  watchNotch([(cb) => void win.onResized(cb).catch(() => {}), (cb) => void win.onMoved(cb).catch(() => {})]);
   await refresh();
+  applyNotch();
 
-  // Deep Link: laufende App (Ereignis) und Start mit Link (abholen)
-  await listen<Link>("open-link", (e) => { void api.takePending(); go(e.payload); });
+  await listen<Link>("open-link", (e) => { void api.takePending(); void go(e.payload); });
   const pending = await api.takePending().catch(() => null);
-  if (pending) go(pending);
+  if (pending) await go(pending);
   window.addEventListener("focus", () => void refresh());
+  // Restzeiten und „heute“ nachziehen
+  window.setInterval(() => { side.render(events, news); agenda.render(events); tl.refresh(); }, 60_000);
 }
 
 void main();

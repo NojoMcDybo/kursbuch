@@ -1,16 +1,24 @@
 //! Kursbuch — LearnWeb-Kurse, Fristen und Suche im Nojo-Oekosystem.
 //!
-//! - model.rs: Datenvertrag mit der Python-Seite (State, Konfiguration), Kursnamen zerlegen
-//! - data.rs:  State lesen (zwischengespeichert), Kursraster und Kursansicht bauen
-//! - open.rs:  Dateien (PDF -> Folio), Links, Obsidian-Notiz und Ordner oeffnen; nur IDs von der Oberflaeche
-//! - links.rs: Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff> (nur navigieren)
+//! - model.rs:  Datenvertrag mit der Python-Seite (State, Konfiguration), Kursnamen zerlegen
+//! - data.rs:   State lesen (zwischengespeichert), Kursraster und Kursansicht bauen
+//! - events.rs: Termine (LearnWeb-Fristen + Sitzungen/Fristen aus Abschnittstiteln und Labels)
+//! - colors.rs: feste Kursfarben
+//! - visits.rs: „Neu seit dem letzten Oeffnen“
+//! - notch.rs:  Lage der Notch (die Oberflaeche weicht aus) und die Karte „naechste Frist“
+//! - open.rs:   Dateien (PDF -> Folio), Links, Obsidian-Notiz und Ordner oeffnen; nur IDs von der Oberflaeche
+//! - links.rs:  Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff> (nur navigieren)
 //!
 //! Die App kennt keine Passwoerter und spricht nie mit LearnWeb: Nur die Python-Seite (learnweb-mcp) tut das.
 
+mod colors;
 mod data;
+mod events;
 mod links;
 mod model;
+mod notch;
 mod open;
+mod visits;
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -53,6 +61,21 @@ fn course(paths: tauri::State<data::Paths>, id: i64) -> Result<data::CourseView,
     data::course_view(&paths, id)
 }
 
+#[tauri::command]
+fn events(paths: tauri::State<data::Paths>) -> Vec<events::Event> {
+    events::load(&paths)
+}
+
+#[tauri::command]
+fn news(paths: tauri::State<data::Paths>, visits: tauri::State<visits::Visits>) -> Result<Vec<visits::NewItem>, String> {
+    visits::news(&paths, &visits)
+}
+
+#[tauri::command]
+fn mark_read(visits: tauri::State<visits::Visits>) {
+    visits.mark_read();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -65,7 +88,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             overview,
             course,
+            events,
+            news,
+            mark_read,
             take_pending,
+            notch::notch_rect,
             open::open_file,
             open::open_web,
             open::open_note,
@@ -73,7 +100,10 @@ pub fn run() {
         ])
         .setup(|app| {
             let h = app.handle().clone();
-            h.manage(data::Paths::load(&h));
+            let paths = data::Paths::load(&h);
+            h.manage(visits::Visits::load(&paths));
+            h.manage(paths);
+            notch::spawn(h.clone());
             // Schema kursbuch:// fuer diesen Benutzer anmelden (der Installer tut es auch; so klappt es auch im Test)
             #[cfg(desktop)]
             let _ = app.deep_link().register_all();
@@ -87,6 +117,11 @@ pub fn run() {
             show(&h);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("Kursbuch konnte nicht starten");
+        .build(tauri::generate_context!())
+        .expect("Kursbuch konnte nicht starten")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                notch::shutdown(); // Karte in der Notch wegraeumen
+            }
+        });
 }

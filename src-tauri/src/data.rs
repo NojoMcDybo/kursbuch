@@ -8,23 +8,33 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Manager};
 
-/// Wo das Python-Projekt und uv liegen (vorbelegt; `settings.json` im App-Ordner darf beides ueberschreiben)
+/// Wo das Python-Projekt und uv liegen (vorbelegt) und wo die App ihre eigenen Dateien ablegt. `settings.json` im
+/// App-Ordner darf `project` und `uv` ueberschreiben und mit `"notch": false` die Notch-Karte abschalten.
 pub struct Paths {
     pub project: PathBuf,
     pub uv: PathBuf,
+    /// App-Ordner (colors.json, visits.json, settings.json)
+    pub config: PathBuf,
+    /// Karte „naechste Frist“ an die Notch senden
+    pub notch: bool,
 }
 
 impl Paths {
     pub fn load(app: &AppHandle) -> Paths {
         let home = std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_default();
-        let mut p = Paths { project: home.join("learnweb-mcp"), uv: home.join(".local").join("bin").join("uv.exe") };
-        let file = app.path().app_config_dir().ok().map(|d| d.join("settings.json"));
-        if let Some(v) = file.and_then(|f| std::fs::read(f).ok()).and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
+        // KURSBUCH_PROJECT und KURSBUCH_CONFIG: Test-Hook, damit sich die App gegen Kopien ausprobieren laesst
+        let config = std::env::var_os("KURSBUCH_CONFIG").map(PathBuf::from).or_else(|| app.path().app_config_dir().ok()).unwrap_or_else(|| home.join(".kursbuch"));
+        let project = std::env::var_os("KURSBUCH_PROJECT").map(PathBuf::from).unwrap_or_else(|| home.join("learnweb-mcp"));
+        let mut p = Paths { project, uv: home.join(".local").join("bin").join("uv.exe"), config, notch: true };
+        if let Some(v) = std::fs::read(p.config.join("settings.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
             if let Some(s) = v["project"].as_str() {
                 p.project = PathBuf::from(s);
             }
             if let Some(s) = v["uv"].as_str() {
                 p.uv = PathBuf::from(s);
+            }
+            if let Some(b) = v["notch"].as_bool() {
+                p.notch = b;
             }
         }
         p
@@ -83,7 +93,7 @@ pub fn course<'a>(s: &'a State, id: i64) -> Result<&'a CourseRec, String> {
     s.courses.get(&id.to_string()).ok_or_else(|| "Kurs nicht gefunden.".to_string())
 }
 
-/// Labels sind nur Text im Kurs (Ueberschriften, Hinweise) und kein Inhalt
+/// Labels sind nur Text im Kurs (Ueberschriften, Hinweise) und zaehlen nicht als Inhalt (Zahlen, „Neu“)
 pub fn visible(cm: &Cm) -> bool {
     cm.typ != "label"
 }
@@ -105,6 +115,8 @@ pub struct CourseCard {
     pub title: String,
     pub semester: Option<String>,
     pub teacher: Option<String>,
+    /// Farbton des Kurses (0-359, bleibt gleich)
+    pub hue: u16,
     pub activities: usize,
     pub files: usize,
     pub skipped: usize,
@@ -117,6 +129,7 @@ pub fn overview(paths: &Paths) -> Overview {
         Err(e) if e == "no_state" => return Overview { status: "no_state", error: None, last_run: None, courses: vec![] },
         Err(e) => return Overview { status: "error", error: Some(e), last_run: None, courses: vec![] },
     };
+    let hues = crate::colors::hues(paths, &s.courses.values().map(|c| c.id).collect::<Vec<_>>());
     let mut courses: Vec<CourseCard> = s
         .courses
         .values()
@@ -128,6 +141,7 @@ pub fn overview(paths: &Paths) -> Overview {
                 title: n.title,
                 semester: n.semester,
                 teacher: n.teacher,
+                hue: hues.get(&c.id).copied().unwrap_or(283),
                 activities: cms.len(),
                 files: cms.iter().map(|m| m.files.len()).sum(),
                 skipped: cms.iter().map(|m| m.skipped.len()).sum(),
@@ -149,6 +163,7 @@ pub struct CourseView {
     pub title: String,
     pub semester: Option<String>,
     pub teacher: Option<String>,
+    pub hue: u16,
     pub web: bool,
     pub note: bool,
     pub sections: Vec<SectionView>,
@@ -196,6 +211,8 @@ pub fn course_view(paths: &Paths, id: i64) -> Result<CourseView, String> {
     let c = course(&s, id)?;
     let n = split_name(&c.name);
     let note = ziel(paths).map(|z| note_path(&z, c).is_file()).unwrap_or(false);
+    let hue = crate::colors::hues(paths, &[c.id]).get(&c.id).copied().unwrap_or(283);
+    // Labels bleiben dabei: ihr Text (Hinweise, Fristen) gehoert zur Kursseite; die Oberflaeche zeigt ihn als Absatz
     let sections = c
         .layout
         .iter()
@@ -204,7 +221,6 @@ pub fn course_view(paths: &Paths, id: i64) -> Result<CourseView, String> {
             items: ids
                 .iter()
                 .filter_map(|k| Some((k.parse::<i64>().ok()?, c.cms.get(k)?)))
-                .filter(|(_, m)| visible(m))
                 .map(|(cmid, m)| ItemView {
                     cmid,
                     name: m.name.clone(),
@@ -226,5 +242,5 @@ pub fn course_view(paths: &Paths, id: i64) -> Result<CourseView, String> {
                 .collect(),
         })
         .collect();
-    Ok(CourseView { id: c.id, title: n.title, semester: n.semester, teacher: n.teacher, web: is_web(&c.url), note, sections })
+    Ok(CourseView { id: c.id, title: n.title, semester: n.semester, teacher: n.teacher, hue, web: is_web(&c.url), note, sections })
 }
