@@ -18,11 +18,13 @@ import { todayDay } from "./dates";
 import { FocusScene } from "./focus";
 import { Fog } from "./fog";
 import { applyNotch, watchNotch } from "./notch-align";
-import { initGrab, isAlone, isFocus, isLocked, setAlone, setFocus, setLocked } from "./scene";
+import { initGrab, isFocus, isLocked, setFocus, setLocked } from "./scene";
 import { isSearchKey, Search } from "./search";
 import { Timeline } from "./timeline";
 import { Timetable } from "./timetable";
-import { act, el, fillIcons, hueHex, ico, menu, q, shortSem } from "./ui";
+import { act, el, fillIcons, hueHex, ico, menu, q, shortSem, toast } from "./ui";
+import { mountPomodoroWidget, WIDGET_POS } from "./widget";
+import "@fontsource-variable/nunito-sans";
 
 let events: Ev[] = [];
 let news: NewItem[] = [];
@@ -41,6 +43,7 @@ const KEY_LOGIN = "kursbuch-login";
 /** Farben des Anmeldebilds (es gibt noch keine Kurse, nach denen sich der Nebel richten koennte) */
 const LOGIN_HUES = ["#6f8cff", "#bf5af2", "#ff6a88", "#30d1c0"];
 const PHASE_HUES: Record<string, string[]> = { focus: ["#ffb09b", "#ff7a85", "#ffd08a"], short: ["#8fdcbc", "#5ec9d8", "#a8e6a1"], long: ["#8fdcbc", "#5ec9d8", "#a8e6a1"] };
+const KEY_BG = "kursbuch-bg";
 
 /** Semester-Segmente im Kopf: die zwei neuesten, die aelteren hinter „…“ (dort steht dann der gewaehlte Name) */
 function renderSems() {
@@ -79,12 +82,19 @@ function semesterChanged() {
   tt.setSemester(courses.semester);
 }
 
-/** Nebel: im Anmeldebild bunt, beim Timer in der Farbe der Phase (Pfirsich = Fokus, Mint = Pause), sonst in den Farben des Semesters */
+/** Nebel: im Anmeldebild bunt, im Fokus-Modus bei laufendem Timer in der Farbe der Phase (Pfirsich = Fokus, Mint = Pause), sonst in den Farben des Semesters */
 function tint() {
   const phase = document.body.dataset.phase ?? "idle";
-  const hues = isLocked() ? LOGIN_HUES : isAlone() && PHASE_HUES[phase] ? PHASE_HUES[phase] : courses.hues().map((h) => hueHex(h));
+  const hues = isLocked() ? LOGIN_HUES : isFocus() && PHASE_HUES[phase] ? PHASE_HUES[phase] : courses.hues().map((h) => hueHex(h));
   fog.setColors(hues);
-  document.body.classList.toggle("vivid", isLocked() || isFocus() || isAlone());
+  document.body.classList.toggle("vivid", isLocked() || isFocus());
+}
+
+/** Hintergrund: der bewegte farbige Nebel oder ein weiches Beige (merkt sich die Wahl; das Widget liest sie ebenfalls) */
+function applyBg(beige: boolean) {
+  document.documentElement.dataset.bg = beige ? "beige" : "dyn";
+  fog?.hold(beige);
+  try { localStorage.setItem(KEY_BG, beige ? "beige" : "dyn"); } catch { /* egal */ }
 }
 
 function scenesChanged() {
@@ -130,7 +140,7 @@ async function refresh() {
 async function go(l: Link) {
   if (l.view === "kurs") act(api.openCourse(l.arg));
   else if (l.view === "suche") search.open(l.arg);
-  else if (l.view === "fokus") { if (!isLocked() && !isAlone()) setFocus(true); scenesChanged(); }
+  else if (l.view === "fokus") { if (!isLocked()) setFocus(true); scenesChanged(); }
   else if (l.view === "heute") {
     tl.today();
     cal.pick(todayDay());
@@ -199,16 +209,26 @@ async function main() {
   brand.append(ico("kursbuch", 30), el("b", "", "Kursbuch"), el("span", "", "mit LearnWeb anmelden"));
   card.append(brand, loginForm(() => void account.refresh()));
   lg.append(card);
-  focus = new FocusScene((on) => { void setAlone(on).then(scenesChanged); });
+  // der Timer laeuft in einem eigenen Widget-Fenster ohne Rahmen (immer oben); die gemerkte Lage geht mit
+  focus = new FocusScene((on) => {
+    let pos: { x?: number; y?: number } = {};
+    try { pos = JSON.parse(localStorage.getItem(WIDGET_POS) ?? "{}"); } catch { /* egal */ }
+    void api.pomodoroWidget(on, pos.x, pos.y).catch((e) => toast(typeof e === "string" ? e : "Das Widget ließ sich nicht öffnen."));
+  });
   let lastPhase = "";
   focus.pomo.subscribe(() => { // Farbe des Nebels folgt der Phase des Timers
     const k = focus.pomo.status === "idle" ? "idle" : focus.pomo.phase;
-    if (k !== lastPhase) { lastPhase = k; if (isAlone()) tint(); }
+    if (k !== lastPhase) { lastPhase = k; tint(); }
   });
   lg.dataset.tauriDragRegion = "";
   q("#scene").append(lg, focus.el);
   initGrab(q(".sheet"), q(".grab"), scenesChanged);
   q(".fbtn").addEventListener("click", () => { setFocus(!isFocus()); scenesChanged(); });
+  q(".bgbtn").addEventListener("click", () => applyBg(document.documentElement.dataset.bg !== "beige"));
+  let beige = false;
+  try { beige = localStorage.getItem(KEY_BG) === "beige"; } catch { /* egal */ }
+  applyBg(beige);
+  void document.fonts?.ready.then(() => tl.refresh()); // der Zeitstrahl zeichnet mit der Schrift
 
   q("#tl-host").append(tl.el);
   q("#slot-l").append(courses.el);
@@ -233,7 +253,7 @@ async function main() {
   scrim.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => {
     if (isSearchKey(e)) { e.preventDefault(); search.open(); return; }
-    if (e.key === "Escape") { if (document.body.classList.contains("dr")) closeDrawer(); else if (isFocus() && !isAlone()) { setFocus(false); scenesChanged(); } else if (document.body.classList.contains("full")) void setFull(false); }
+    if (e.key === "Escape") { if (document.body.classList.contains("dr")) closeDrawer(); else if (isFocus()) { setFocus(false); scenesChanged(); } else if (document.body.classList.contains("full")) void setFull(false); }
     if (e.key === "F11") { e.preventDefault(); void setFull(!document.body.classList.contains("full")); }
   });
 
@@ -242,7 +262,6 @@ async function main() {
   await refresh();
   tint();
   applyNotch();
-  if (focus.pomo.active) void setAlone(true).then(scenesChanged); // ein laufender Timer ueberlebt ein Neuladen
 
   await listen<Link>("open-link", (e) => { void api.takePending(); void go(e.payload); });
   const pending = await api.takePending().catch(() => null);
@@ -254,11 +273,14 @@ async function main() {
 
 const params = new URLSearchParams(location.search);
 const course = Number(params.get("kurs"));
-if (params.has("kurs") && Number.isInteger(course) && course > 0) {
+if (params.get("widget") === "pomodoro") {
+  document.getElementById("dash")?.remove();
+  try { document.documentElement.dataset.bg = localStorage.getItem(KEY_BG) === "beige" ? "beige" : "dyn"; } catch { /* egal */ }
+  void mountPomodoroWidget();
+} else if (params.has("kurs") && Number.isInteger(course) && course > 0) {
   document.getElementById("dash")?.remove();
   const cmid = Number(params.get("cmid"));
   void mountCourseWindow(course, { cmid: Number.isInteger(cmid) && cmid > 0 ? cmid : null, section: params.get("sec") });
 } else {
   void main();
 }
-

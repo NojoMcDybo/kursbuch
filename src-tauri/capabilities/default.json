@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Hauptfenster und Kursfenster",
-  "windows": ["main", "kurs-*"],
+  "windows": ["main", "kurs-*", "pomodoro"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

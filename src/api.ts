@@ -73,6 +73,15 @@ export type Focus = { lists: TodoList[]; settings: FocusSettings; stats: FocusSt
 /** Stand des Pomodoro fuer die Karte in der Notch (Rust: pomodoro.rs) */
 export type PomoNotch = { phase: "focus" | "short" | "long"; status: "running" | "paused" | "ready"; ends_at: number; left: number; total: number; task: string; round: number; rounds: number };
 
+/** Inhalte ohne Datei (Python: content.py, Rust: content.rs) */
+export type WebLink = { text: string; url: string };
+export type News = { id: number | null; forum: number | null; forum_name: string; title: string; author: string; ts: number | null; text: string; links: WebLink[]; files: { name: string; url: string }[]; url: string | null };
+export type Assignment = { cmid: number; name: string; url: string | null; intro: string; links: WebLink[]; due: string | null; status: string; grading: string; remaining: string; due_ts: number | null };
+export type Teacher = { id: number; name: string; role: string; email: string | null; profile: string | null; fields: Record<string, string>; source: string; checked: number | null };
+export type Extras = { news: News[]; assignments: Assignment[]; teachers: Teacher[]; contacts: { email: string; where: string }[] };
+/** Selbst-Update (Rust: update.rs) */
+export type Upd = { status: "idle" | "checking" | "current" | "available" | "downloading" | "error"; version?: string; current: string; message?: string };
+
 export const api = {
   overview: () => invoke<Overview>("overview"),
   course: (id: number) => invoke<CourseView>("course", { id }),
@@ -111,5 +120,13 @@ export const api = {
   focusLog: (minutes: number, task: string) => invoke<FocusStats>("focus_log", { minutes, task }),
   /** Timer fuer die Notch; null = beendet */
   pomodoroNotch: (state: PomoNotch | null) => invoke<void>("pomodoro_notch", { state }),
+  courseExtras: (course: number) => invoke<Extras>("course_extras", { course }),
+  /** http(s) und mailto; Rust prueft noch einmal */
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
+  /** Pomodoro-Widget (eigenes Fenster) zeigen oder schliessen; x/y = gemerkte Lage */
+  pomodoroWidget: (show: boolean, x?: number, y?: number) => invoke<void>("pomodoro_widget", { show, x: x ?? null, y: y ?? null }),
+  updateState: () => invoke<Upd>("update_state"),
+  updateCheck: () => invoke<Upd>("update_check"),
+  updateInstall: () => invoke<void>("update_install"),
   takePending: () => invoke<Link | null>("take_pending"),
 };

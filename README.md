@@ -56,6 +56,16 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
 - **Für KI** (`share.rs`): ✦ im Kopf eines Kurses kopiert die **Übersicht** (Auszug aus `_Verzeichnis.md`) oder **Übersicht + Text**
   (samt Text aller Dateien aus dem Index, höchstens 400 000 Zeichen) als Markdown. In der Suche kopiert ✦ die Treffer oder das ganze
   Verzeichnis oder öffnet es in Obsidian.
+- **Anmeldung und Fokus** (`scene.ts`, `focus.ts`, `pomodoro.ts`, `focus.rs`): Ohne gespeicherte Zugangsdaten zeigt das Fenster nur den
+  farbigen Verlauf mit einem Liquid-Glass-Anmeldefeld; nach der Anmeldung fährt die dunkle Fläche von unten hoch. Der Griff oben an der Fläche
+  (oder der Timer-Knopf in der Leiste) fährt sie in den **Fokus-Modus** herunter: To-do-Listen (mehrere, Aufgabe → Timer starten), Pomodoro-Timer
+  (25 / 5 min einstellbar, nach vier Runden die dreifache Pause; nichts startet von selbst) und **Lernstreak** (Tage in Folge mit einer
+  abgeschlossenen Fokusphase, Raster der letzten 12 Wochen). Alles liegt in `focus.json` im App-Ordner.
+- **Pomodoro-Widget** (`widget.ts`, `widget.rs`): Beim Start öffnet sich ein eigenes Fenster ohne Rahmen, durchsichtig, immer oben, überall verschiebbar
+  (die Lage wird gemerkt). Es zeigt den Timer des Hauptfensters und steuert ihn (Pause, Weiter, Überspringen, Stopp); Stopp schließt es. Dazu die
+  Karte `kursbuch:pomodoro` in der Notch (Wert, Balken, Knöpfe; `pomodoro.rs`). Schließt man das Hauptfenster, endet die App.
+- **Hintergrund**: Der Knopf mit der Sonne in der Leiste wechselt zwischen dem bewegten Farbverlauf und einem weichen Beige (Anmeldebild, Fokus,
+  Leiste und Widget; die dunkle Fläche bleibt dunkel). **Schrift**: Nunito Sans (variable, OFL, mit der App gebündelt).
 - **Größen**: ab 960 px drei Spalten; darunter werden Kalender und Abgaben eine Schublade (Knopf in der Leiste). F11 = Vollbild.
 - **Notch** (`notch-align.ts`, `notch.rs`): Liegt die Notch über der Leiste, teilt sie sich links und rechts von ihr (Zone ab
   `--nz-x`, Breite `--nz-w`); seitlich angedockt halten Leiste und Fläche Abstand. Dazu die Karte `kursbuch:frist` (nächste Frist
@@ -87,11 +97,37 @@ Python-Projekt und `uv.exe` liegen standardmäßig unter `%USERPROFILE%\learnweb
 Zum Ausprobieren gegen Kopien: Umgebungsvariablen `KURSBUCH_PROJECT` (Projektordner), `KURSBUCH_CONFIG` (App-Ordner) und `KURSBUCH_DOWNLOADS`
 (Zielordner des .ics-Exports; ohne sie zeigt der Export die Datei im Explorer).
 
+## Inhalte ohne Datei (Kursfenster)
+
+Die Python-Seite holt beim Sync (und mit `uv run python -m learnweb.cli content [--force]`) zusätzlich **Ankündigungen** (Nachrichtenforen,
+neue Themen), **Aufgaben** (Beschreibung, Abgabe- und Bewertungsstatus) und **Dozenten** (Teilnehmerliste nach Rolle, Profil mit E-Mail; nur alle
+14 Tage; nie Studierende) nach `data/content.json` und in den Suchindex. Das Kursfenster zeigt die Ankündigungen oben im Seitenfluss und rechts die
+**Abgaben** des Kurses (Frist, Status) sowie **Dozenten und Kontakt** mit der Quelle („LearnWeb: Teilnehmerliste und Profil, Stand …“) und weitere
+Adressen aus Kurstexten mit Fundstelle. Verweise öffnen im Browser (nur http, https, mailto).
+
 ## Deep Link
 
 `kursbuch://heute` (Zeitstrahl und Kalender auf heute), `kursbuch://kurs/<id>` (Kursfenster öffnen),
 `kursbuch://suche/<Begriff>` (Suche öffnen und ausführen). Ein Link darf nur **navigieren**; alles Verformte wird ignoriert. Ein zweiter Start
 reicht ihn an die laufende App weiter. Die App meldet das Schema beim Start an (im Entwicklungsbetrieb: `target\debug`).
+
+## Updates und Veröffentlichen (wie Arena und die Notch)
+
+Kursbuch aktualisiert sich selbst: 20 s nach dem Start und dann alle 6 h fragt es
+`https://github.com/NojoMcDybo/kursbuch/releases/latest/download/latest.json`. Gibt es eine neue Version, leuchtet ein Punkt am Konto-Kreis;
+im Konto-Menü steht **Installieren** (lädt, prüft die Signatur mit dem öffentlichen Schlüssel aus `tauri.conf.json`, derselbe wie bei Arena und
+Notch, und startet neu).
+
+Veröffentlichen: Version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml` und `src-tauri/tauri.conf.json` erhöhen, committen, Tag
+`v<version>` pushen. `.github/workflows/release.yml` baut, signiert (Secret `TAURI_SIGNING_PRIVATE_KEY`; der private Schlüssel liegt nur unter
+`%USERPROFILE%\.tauri
+ojo-updater.key`) und hängt Installer und `latest.json` an das Release. Einmalig: Repository `NojoMcDybo/kursbuch` anlegen
+und das Secret setzen (`gh secret set TAURI_SIGNING_PRIVATE_KEY < %USERPROFILE%\.tauri
+ojo-updater.key`).
+
+Lokal bauen: `npx tauri build --bundles nsis` (Installer unter `src-tauri	argeteleaseundle
+sis`, bei fremdem `CARGO_TARGET_DIR` dort).
+Installer per Explorer starten (die Claude-App läuft virtualisiert); Installation außerhalb von AppData: `Kursbuch_…-setup.exe /S /D=D:\Dev\_apps\Kursbuch`.
 
 ## Entwickeln
 
@@ -106,4 +142,5 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Phase 2: Gerüst, Öffnen, Deep Link. Phase 3: Dashboard-Umbau (Zeitstrahl, Kalender, Semester, Kursseiten, Notch, Farben).
 - Phase 4: Suche (Volltext, „Tief“), Verzeichnis für Claude/ChatGPT (`_Verzeichnis.md`), „Für KI kopieren“, Sofort-Download.
 - Umbau 2 (2026-10-14): Leiste + große matte Fläche, Liquid Glass nur für Knöpfe, Stundenplan (schreiben, .ics importieren/exportieren), Kurse in eigenen Fenstern, Konto-Anmeldung, Suchfenster aus der Lupe.
+- Umbau 3: Pomodoro-Widget, Beige-Hintergrund, Nunito Sans, Selbst-Update (v0.2.0), Inhalte ohne Datei im Kursfenster.
 - Phase 5: KI (Laya): Termine und Fristen aus Folien als Vorschläge. Phase 6: Sync aus der App, Einstellungen, Installer.

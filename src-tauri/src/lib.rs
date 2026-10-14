@@ -15,12 +15,15 @@
 //! - windows.rs: Kurse in eigenen Fenstern (`kurs-<id>`)
 //! - focus.rs:  To-do-Listen, Pomodoro-Einstellungen, Lernstreaks (focus.json); pomodoro.rs: der Timer als Live Activity der Notch
 //! - store.rs:  kleine JSON-Ablage im App-Ordner
+//! - widget.rs: Pomodoro-Widget (eigenes Fenster ohne Rahmen, immer oben); update.rs: Selbst-Update ueber GitHub Releases
+//! - content.rs: Ankuendigungen, Aufgaben, Dozenten aus data/content.json (Python-Seite)
 //! - links.rs:  Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff> (nur navigieren)
 //!
 //! Die App kennt keine Passwoerter und spricht nie mit LearnWeb: Nur die Python-Seite (learnweb-mcp) tut das.
 
 mod account;
 mod colors;
+mod content;
 mod data;
 mod events;
 mod fetch;
@@ -35,7 +38,9 @@ mod search;
 mod share;
 mod store;
 mod timetable;
+mod update;
 mod visits;
+mod widget;
 mod windows;
 
 use std::sync::Mutex;
@@ -110,6 +115,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             overview,
             course,
@@ -139,6 +145,12 @@ pub fn run() {
             focus::focus_save,
             focus::focus_log,
             pomodoro::pomodoro_notch,
+            widget::pomodoro_widget,
+            content::course_extras,
+            content::open_url,
+            update::update_state,
+            update::update_check,
+            update::update_install,
         ])
         .setup(|app| {
             let h = app.handle().clone();
@@ -147,6 +159,7 @@ pub fn run() {
             h.manage(paths);
             notch::spawn(h.clone());
             pomodoro::spawn(h.clone());
+            update::spawn(h.clone());
             // Schema kursbuch:// fuer diesen Benutzer anmelden (der Installer tut es auch; so klappt es auch im Test)
             #[cfg(desktop)]
             let _ = app.deep_link().register_all();
@@ -162,7 +175,13 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("Kursbuch konnte nicht starten")
-        .run(|_app, event| {
+        .run(|app, event| {
+            // schliesst das Hauptfenster, endet die App (der Timer lebt dort; ein uebrig gebliebenes Widget haette keinen Zaehler mehr)
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
+                if label == "main" {
+                    app.exit(0);
+                }
+            }
             if let tauri::RunEvent::Exit = event {
                 notch::shutdown(); // Karte in der Notch wegraeumen
                 pomodoro::shutdown();

@@ -4,7 +4,8 @@
  * prueft und im Windows-Tresor ablegt; die App behaelt nichts davon (das Feld wird nach jedem Versuch geleert).
  */
 
-import { api, type Account as Status } from "./api";
+import { listen } from "@tauri-apps/api/event";
+import { api, type Account as Status, type Upd } from "./api";
 import { ago } from "./dates";
 import { el, ico, iconBtn, message, toast } from "./ui";
 
@@ -55,8 +56,11 @@ export class Account {
   private pop: HTMLElement | null = null;
   private status: Status | null = null;
   private lastRun: number | null = null;
+  private upd: Upd | null = null;
 
   constructor(private o: AccountOpts) {
+    void api.updateState().then((u) => { this.upd = u; this.paintDot(); }).catch(() => {});
+    void listen<Upd>("update", (e) => { this.upd = e.payload; this.paintDot(); if (this.pop) this.draw(); });
     this.el.append(this.dot);
     this.el.setAttribute("aria-haspopup", "dialog");
   }
@@ -79,6 +83,8 @@ export class Account {
     const age = this.lastRun ? Date.now() / 1000 - this.lastRun : Infinity;
     const cls = !this.status?.saved ? "off" : age < 36 * 3600 ? "ok" : "wait";
     this.dot.className = `acct-dot ${cls}`;
+    this.el.querySelector(".n-dot")?.remove();
+    if (this.upd?.status === "available") this.el.append(el("i", "n-dot")); // es gibt eine neue Version
     this.el.title = this.status?.saved ? `LearnWeb: ${this.status.user ?? ""}${this.lastRun ? ` · Sync ${ago(this.lastRun)}` : ""}` : "Bei LearnWeb anmelden";
   }
 
@@ -110,6 +116,22 @@ export class Account {
     void this.refresh();
   }
 
+  /** Version und Selbst-Update (Rust: update.rs): sucht beim Start und alle 6 Stunden; hier auch auf Wunsch */
+  private updateRow() {
+    const u = this.upd ?? { status: "idle", current: "" } as Upd;
+    const row = el("div", "ap-up");
+    const text = { idle: "Sucht beim Start nach Updates", checking: "Sucht …", current: "Aktuell", available: `Version ${u.version} ist da`, downloading: "Lädt – Kursbuch startet gleich neu …", error: u.message ?? "Prüfung fehlgeschlagen" }[u.status];
+    row.append(el("span", "", `${u.current ? `Kursbuch ${u.current} · ` : ""}${text}`));
+    const b = el("button", `n-btn${u.status === "available" ? " primary" : ""}`, u.status === "available" ? "Installieren" : "Suchen");
+    b.disabled = u.status === "checking" || u.status === "downloading";
+    b.addEventListener("click", () => {
+      if (u.status === "available") void api.updateInstall().catch((e) => toast(message(e)));
+      else void api.updateCheck().then((n) => { this.upd = n; this.paintDot(); this.draw(); }).catch((e) => toast(message(e)));
+    });
+    row.append(b);
+    return row;
+  }
+
   private draw() {
     const pop = this.pop;
     if (!pop) return;
@@ -124,14 +146,14 @@ export class Account {
         out.disabled = true;
         api.accountLogout().then(() => { toast("Abgemeldet"); return this.refresh(); }).then(() => this.o.onChange()).catch((e) => toast(message(e))).finally(() => { out.disabled = false; });
       });
-      pop.replaceChildren(head, out);
+      pop.replaceChildren(head, out, this.updateRow());
       return;
     }
     const form = loginForm(() => { void this.refresh().then(() => this.o.onChange()); });
     const head = el("div", "ap-t");
     head.append(ico("lock"), el("span", "", "LearnWeb"));
     form.prepend(head);
-    pop.replaceChildren(form);
+    pop.replaceChildren(form, this.updateRow());
     form.querySelector<HTMLInputElement>("input")?.focus();
   }
 }

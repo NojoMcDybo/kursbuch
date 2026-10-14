@@ -5,7 +5,7 @@
  * (localStorage). Die Notch zeigt dazu eine eigene Karte (Rust: pomodoro.rs); ihre Knoepfe kommen als `pomodoro-action` zurueck.
  */
 
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { api, type PomoNotch } from "./api";
 
 export type Phase = "focus" | "short" | "long";
@@ -40,7 +40,9 @@ export class Pomodoro {
       else if (e.payload === "resume") this.resume();
       else if (e.payload === "start") this.start();
       else if (e.payload === "stop") this.stop();
+      else if (e.payload === "skip") this.skip();
     });
+    void listen("pomodoro-hello", () => this.broadcast()); // das Widget fragt nach dem Stand, sobald es offen ist
   }
 
   /** bei jeder Aenderung und (laufend) mehrmals je Sekunde */
@@ -110,12 +112,18 @@ export class Pomodoro {
     if (this.status === "running") this.timer = window.setInterval(() => this.tick(), 250);
     try { localStorage.setItem(KEY, JSON.stringify({ phase: this.phase, status: this.status, round: this.round, task: this.task, endAt: this.endAt, leftMs: this.leftMs, focusMin: this.focusMin, pauseMin: this.pauseMin })); } catch { /* egal */ }
     if (notify) this.notch();
+    this.broadcast();
     this.subs.forEach((f) => f());
   }
 
   private tick() {
     if (this.status === "running" && Date.now() >= this.endAt) this.finish(true);
     else this.subs.forEach((f) => f());
+  }
+
+  /** Stand an das Widget-Fenster (es rechnet die Sekunden selbst weiter) */
+  private broadcast() {
+    void emit("pomodoro-state", { phase: this.phase, status: this.status, round: this.round, rounds: ROUNDS, task: this.task, endAt: this.endAt, leftMs: this.leftMs, total: this.total });
   }
 
   private notch() {
