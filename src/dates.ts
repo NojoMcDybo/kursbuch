@@ -6,6 +6,15 @@ export const todayDay = () => dayOf(new Date());
 /** Datum (lokale Mitternacht) zu einer Tageszahl */
 export const dateOf = (day: number) => { const u = new Date(day * 86_400_000); return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate()); };
 
+/** Montag der Woche eines Tages (Tageszahl) */
+export const mondayOf = (day: number) => day - weekdayIndex(dateOf(day));
+/** Kalenderwoche nach ISO 8601 */
+export function isoWeek(d: Date) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  return Math.ceil(((+t - +new Date(Date.UTC(t.getUTCFullYear(), 0, 1))) / 86_400_000 + 1) / 7);
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 export const weekday = (d: Date) => WD[d.getDay()];

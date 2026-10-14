@@ -7,7 +7,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { api, type Account as Status, type Upd } from "./api";
 import { ago } from "./dates";
-import { el, ico, iconBtn, message, toast } from "./ui";
+import { el, ico, iconBtn, leave, message, toast } from "./ui";
 
 /** Anmeldeformular (Kennung, Passwort): im Konto-Menue und auf dem Anmeldebild. `onDone` nach geglueckter Anmeldung. */
 export function loginForm(onDone: () => void): HTMLFormElement {
@@ -93,12 +93,14 @@ export class Account {
   }
 
   private close() {
-    this.pop?.remove();
+    if (this.pop) leave(this.pop);
     this.pop = null;
+    window.removeEventListener("resize", this.resize);
     document.removeEventListener("pointerdown", this.away, true);
     document.removeEventListener("keydown", this.key, true);
   }
 
+  private resize = () => this.close();
   private away = (e: Event) => { if (this.pop && !this.pop.contains(e.target as Node) && !this.el.contains(e.target as Node)) this.close(); };
   private key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); this.close(); this.el.focus(); } };
 
@@ -109,8 +111,9 @@ export class Account {
     document.body.append(this.pop);
     const r = this.el.getBoundingClientRect();
     this.pop.style.top = `${r.bottom + 8}px`;
-    this.pop.style.left = `${Math.max(8, r.left)}px`;
+    this.pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 290 - 8))}px`;
     document.addEventListener("pointerdown", this.away, true);
+    window.addEventListener("resize", this.resize);
     document.addEventListener("keydown", this.key, true);
     this.draw();
     void this.refresh();

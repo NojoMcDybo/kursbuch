@@ -1,7 +1,7 @@
 /**
  * Kursbuch — LearnWeb im Nojo-Oekosystem. Hauptfenster: oben die Leiste (Konto, Semester, Notch-Zone, Lupe, Fensterknoepfe),
  * darunter eine grosse matte Flaeche mit runden oberen Ecken: Zeitstrahl, links die Kurse, in der Mitte der Stundenplan, rechts
- * Kalender und Abgaben. Kurse oeffnen in eigenen Fenstern (`?kurs=<id>`, coursewin.ts). Daten sind lokal (Python-Seite);
+ * die Abgaben. Kurse oeffnen in eigenen Fenstern (`?kurs=<id>`, coursewin.ts). Daten sind lokal (Python-Seite);
  * Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff>.
  */
 
@@ -11,7 +11,6 @@ import { glassLight, liquid, segments, windowControls } from "./nojo/nojo-ui";
 import { api, type Ev, type Link, type NewItem, type Overview } from "./api";
 import { Abgaben } from "./abgaben";
 import { Account, loginForm } from "./account";
-import { Calendar } from "./calendar";
 import { Courses } from "./courses";
 import { mountCourseWindow } from "./coursewin";
 import { todayDay } from "./dates";
@@ -20,6 +19,7 @@ import { Fog } from "./fog";
 import { applyNotch, watchNotch } from "./notch-align";
 import { initGrab, isFocus, isLocked, setFocus, setLocked } from "./scene";
 import { isSearchKey, Search } from "./search";
+import { SyncUi } from "./syncui";
 import { Timeline } from "./timeline";
 import { Timetable } from "./timetable";
 import { act, el, fillIcons, hueHex, ico, menu, q, shortSem, toast } from "./ui";
@@ -31,19 +31,24 @@ let news: NewItem[] = [];
 let signature = "";
 let fog: Fog;
 let tl: Timeline;
-let cal: Calendar;
 let abgaben: Abgaben;
 let courses: Courses;
 let tt: Timetable;
 let account: Account;
 let search: Search;
 let focus: FocusScene;
+let sync: SyncUi;
 
 const KEY_LOGIN = "kursbuch-login";
 /** Farben des Anmeldebilds (es gibt noch keine Kurse, nach denen sich der Nebel richten koennte) */
 const LOGIN_HUES = ["#6f8cff", "#bf5af2", "#ff6a88", "#30d1c0"];
 const PHASE_HUES: Record<string, string[]> = { focus: ["#ffb09b", "#ff7a85", "#ffd08a"], short: ["#8fdcbc", "#5ec9d8", "#a8e6a1"], long: ["#8fdcbc", "#5ec9d8", "#a8e6a1"] };
 const KEY_BG = "kursbuch-bg";
+/** Pomodoro-Widget in der App ausgeblendet (der Timer laeuft weiter, nur das Fenster bleibt zu) */
+const KEY_WHIDE = "kursbuch-widget-hidden";
+const widgetHidden = () => { try { return localStorage.getItem(KEY_WHIDE) === "1"; } catch { return false; } };
+/** nach so vielen Stunden ohne Abgleich gleicht die App beim Start von selbst ab */
+const STALE_H = 20;
 
 /** Semester-Segmente im Kopf: die zwei neuesten, die aelteren hinter „…“ (dort steht dann der gewaehlte Name) */
 function renderSems() {
@@ -100,6 +105,75 @@ function applyBg(beige: boolean) {
 function scenesChanged() {
   renderSems();
   tint();
+  paintWidgetBtn();
+}
+
+/** Widget-Fenster oeffnen/schliessen; die gemerkte Lage geht mit */
+function setWidget(on: boolean) {
+  let pos: { x?: number; y?: number } = {};
+  try { pos = JSON.parse(localStorage.getItem(WIDGET_POS) ?? "{}"); } catch { /* egal */ }
+  void api.pomodoroWidget(on, pos.x, pos.y).catch((e) => toast(typeof e === "string" ? e : "Das Widget ließ sich nicht öffnen."));
+}
+
+function toggleWidget(hide = !widgetHidden()) {
+  try { localStorage.setItem(KEY_WHIDE, hide ? "1" : "0"); } catch { /* egal */ }
+  setWidget(!hide && focus.pomo.active);
+  paintWidgetBtn();
+}
+
+/** Knopf „Widget ausblenden/einblenden“: nur sichtbar, wenn ein Timer laeuft oder der Fokus-Modus offen ist */
+function paintWidgetBtn() {
+  const b = q<HTMLButtonElement>(".wbtn");
+  const hidden = widgetHidden();
+  b.hidden = !(focus?.pomo.active || isFocus());
+  b.classList.toggle("off", hidden);
+  b.setAttribute("aria-pressed", String(hidden));
+  b.title = hidden ? "Pomodoro-Widget einblenden" : "Pomodoro-Widget ausblenden";
+  b.setAttribute("aria-label", b.title);
+  b.replaceChildren(ico(hidden ? "eye-off" : "eye"));
+}
+
+/** Anmeldebild: Formular oder Fortschritt des ersten Abgleichs */
+function working(on: boolean) {
+  const card = q(".lg-card");
+  card.classList.toggle("working", on);
+  card.querySelector("form")!.hidden = on;
+  card.querySelector<HTMLElement>(".sp")!.hidden = !on;
+  card.querySelector(".lg-brand span")!.textContent = on ? "Einen Moment, ich richte alles ein" : "mit LearnWeb anmelden";
+}
+
+/** Nach der Anmeldung: gibt es schon Kurse, geht es gleich weiter; sonst sucht und ordnet Kursbuch zuerst alles ein */
+async function freshLogin() {
+  const o = await api.overview().catch(() => null);
+  if (o?.status === "ok" && o.courses.length) { void account.refresh(); return; }
+  autoTried = true;
+  working(true);
+  void sync.start();
+}
+
+/** Beim Start (und nach der Anmeldung) einmal abgleichen, wenn noch nichts da oder der Stand alt ist */
+let autoTried = false;
+async function autoSync() {
+  if (autoTried) return;
+  autoTried = true;
+  const o = await api.overview().catch(() => null);
+  const stale = o?.status === "no_state" || (o?.status === "ok" && (!o.last_run || Date.now() / 1000 - o.last_run > STALE_H * 3600));
+  if (stale && !isLocked()) void sync.start();
+}
+
+function syncEnded(ok: boolean, st: { error: string | null; code: string | null }) {
+  signature = "";
+  const first = q(".lg-card").classList.contains("working");
+  if (first && ok) { working(false); void account.refresh(); return; } // erster Abgleich fertig: Anmeldebild weicht der Ansicht
+  if (!ok && (st.code === "login" || st.code === "credentials")) { // Zugangsdaten stimmen nicht mehr: zurueck zur Anmeldung
+    working(false);
+    toast(st.error ?? "Die Anmeldung bei LearnWeb ist fehlgeschlagen.");
+    void account.refresh();
+    return;
+  }
+  if (first) return; // Fehler: die Karte zeigt ihn und bietet „Nochmal“ an
+  void refresh();
+  if (!ok) toast(st.error ?? "Der Abgleich mit LearnWeb ist fehlgeschlagen.");
 }
 
 /** Zugangsdaten gespeichert oder nicht: Anmeldebild bzw. die Ansicht. Beim Abmelden endet auch ein laufender Timer. */
@@ -107,13 +181,13 @@ function loginState(saved: boolean) {
   try { localStorage.setItem(KEY_LOGIN, saved ? "1" : "0"); } catch { /* egal */ }
   if (!saved && focus?.pomo.active) focus.pomo.stop();
   setLocked(!saved);
-  if (saved) void refresh();
+  if (saved) { void refresh(); void autoSync(); }
   scenesChanged();
 }
 
 function renderAll() {
   tl.setEvents(events);
-  cal.setEvents(events);
+  tt.setEvents(events);
   abgaben.render(events);
   tl.refresh();
 }
@@ -122,7 +196,8 @@ function renderAll() {
 async function refresh() {
   const o = await api.overview().catch((e): Overview => ({ status: "error", error: typeof e === "string" ? e : "Der Stand von LearnWeb lässt sich nicht lesen.", last_run: null, courses: [] }));
   const [ev, nw] = await Promise.all([api.events().catch(() => [] as Ev[]), api.news().catch(() => [] as NewItem[])]);
-  const sig = JSON.stringify([o, ev, nw]);
+  const sug = await api.scheduleGet().catch(() => []);
+  const sig = JSON.stringify([o, ev, nw, sug]);
   if (sig === signature) return;
   signature = sig;
   events = ev;
@@ -135,6 +210,7 @@ async function refresh() {
   tint();
   tt.setSemester(courses.semester);
   tt.refresh();
+  tt.setSuggestions(sug);
 }
 
 async function go(l: Link) {
@@ -143,7 +219,7 @@ async function go(l: Link) {
   else if (l.view === "fokus") { if (!isLocked()) setFocus(true); scenesChanged(); }
   else if (l.view === "heute") {
     tl.today();
-    cal.pick(todayDay());
+    tt.pick(todayDay());
   }
 }
 
@@ -180,7 +256,6 @@ async function main() {
   q("#acct-host").replaceWith(account.el);
   courses = new Courses({ onOpen: open, onRead: () => void refresh() });
   tl = new Timeline({ hueOf, nameOf, onOpen: open });
-  cal = new Calendar({ hueOf, onPick: (day) => tl.focusDay(day) });
   abgaben = new Abgaben({ hueOf, nameOf, onOpen: open });
   tt = new Timetable({
     semester: () => courses.semester,
@@ -190,6 +265,7 @@ async function main() {
     newOf: courses.newOf,
     openCourse: open,
     openWeb: (id) => act(api.openWeb(id)),
+    onPick: (day) => tl.focusDay(day),
   });
   search = new Search({
     hueOf, nameOf,
@@ -207,23 +283,25 @@ async function main() {
   const card = el("div", "lg-card n-glass n-liquid panel");
   const brand = el("div", "lg-brand");
   brand.append(ico("kursbuch", 30), el("b", "", "Kursbuch"), el("span", "", "mit LearnWeb anmelden"));
-  card.append(brand, loginForm(() => void account.refresh()));
+  sync = new SyncUi(syncEnded);
+  card.append(brand, loginForm(() => void freshLogin()), sync.card(() => void sync.start(), () => { working(false); void account.refresh(); }));
+  card.querySelector<HTMLElement>(".sp")!.hidden = true;
   lg.append(card);
   // der Timer laeuft in einem eigenen Widget-Fenster ohne Rahmen (immer oben); die gemerkte Lage geht mit
-  focus = new FocusScene((on) => {
-    let pos: { x?: number; y?: number } = {};
-    try { pos = JSON.parse(localStorage.getItem(WIDGET_POS) ?? "{}"); } catch { /* egal */ }
-    void api.pomodoroWidget(on, pos.x, pos.y).catch((e) => toast(typeof e === "string" ? e : "Das Widget ließ sich nicht öffnen."));
-  });
+  focus = new FocusScene((on) => { setWidget(on && !widgetHidden()); paintWidgetBtn(); });
   let lastPhase = "";
   focus.pomo.subscribe(() => { // Farbe des Nebels folgt der Phase des Timers
     const k = focus.pomo.status === "idle" ? "idle" : focus.pomo.phase;
-    if (k !== lastPhase) { lastPhase = k; tint(); }
+    if (k !== lastPhase) { lastPhase = k; tint(); paintWidgetBtn(); }
   });
+  void listen<string>("pomodoro-action", (e) => { if (e.payload === "hide") toggleWidget(true); }); // der kleine Knopf im Widget selbst
   lg.dataset.tauriDragRegion = "";
   q("#scene").append(lg, focus.el);
   initGrab(q(".sheet"), q(".grab"), scenesChanged);
   q(".fbtn").addEventListener("click", () => { setFocus(!isFocus()); scenesChanged(); });
+  q(".wbtn").addEventListener("click", () => toggleWidget());
+  sync.bind(q(".syncbtn"));
+  paintWidgetBtn();
   q(".bgbtn").addEventListener("click", () => applyBg(document.documentElement.dataset.bg !== "beige"));
   let beige = false;
   try { beige = localStorage.getItem(KEY_BG) === "beige"; } catch { /* egal */ }
@@ -233,7 +311,7 @@ async function main() {
   q("#tl-host").append(tl.el);
   q("#slot-l").append(courses.el);
   q("#slot-c").append(tt.el);
-  q("#slot-r").append(cal.el, abgaben.el);
+  q("#slot-r").append(abgaben.el);
 
   glassLight();
   liquid();
@@ -241,7 +319,7 @@ async function main() {
   void syncWindow();
   void win.onResized(() => void syncWindow()).catch(() => {});
 
-  // Kalender und Abgaben als Schublade in schmalen Fenstern
+  // Abgaben als Schublade in schmalen Fenstern
   const scrim = q(".scrim");
   const closeDrawer = () => { document.body.classList.remove("dr"); scrim.hidden = true; };
   document.querySelectorAll<HTMLButtonElement>(".drawer").forEach((b) => b.addEventListener("click", () => {

@@ -7,6 +7,8 @@ export type CourseCard = {
   title: string;
   semester: string | null;
   teacher: string | null;
+  /** aus dem Titel erkannt */
+  kind: "vorlesung" | "seminar" | "uebung" | null;
   /** Farbton des Kurses (0-359), bleibt gleich */
   hue: number;
   activities: number;
@@ -57,7 +59,11 @@ export type Fetched = { files: number; skipped: number };
 export type FetchError = { code: string; message: string };
 
 /** Eintrag im Stundenplan: woechentlicher Termin; day Montag = 0, start/end in Minuten seit Mitternacht */
-export type Entry = { id: string; title: string; day: number; start: number; end: number; room: string; course: number | null };
+export type Entry = { id: string; title: string; day: number; start: number; end: number; room: string; course: number | null; auto?: boolean; note?: string };
+/** erkannter Regeltermin (Python: schedule.py): Uhrzeit oft offen; key = "<kurs>:<wochentag>" */
+export type Suggestion = { key: string; course: number; title: string; semester: string | null; weekday: number; start: number | null; end: number | null; room: string | null; confidence: string; source: string; sessions: number };
+/** Zeile des Syncs (Python: sync.py --json) oder vom Rahmen: begin | end | error */
+export type SyncEvent = { event: string; courses?: number; index?: number; total?: number; name?: string; message?: string; code?: string | number };
 export type Plans = Record<string, Entry[]>;
 export type Imported = { entries: Entry[]; skipped: number };
 /** LearnWeb-Anmeldung: gespeichert (Kennung) und ob gerade ein Sync laeuft */
@@ -128,5 +134,10 @@ export const api = {
   updateState: () => invoke<Upd>("update_state"),
   updateCheck: () => invoke<Upd>("update_check"),
   updateInstall: () => invoke<void>("update_install"),
+  scheduleGet: () => invoke<Suggestion[]>("schedule_get"),
+  scheduleDismiss: (key: string) => invoke<void>("schedule_dismiss", { key }),
+  /** false, wenn schon ein Sync laeuft */
+  syncStart: () => invoke<boolean>("sync_start"),
+  syncRunning: () => invoke<boolean>("sync_running"),
   takePending: () => invoke<Link | null>("take_pending"),
 };

@@ -43,19 +43,26 @@ export function fillIcons(root: ParentNode = document) {
 export const announce = (t: string) => { q(".sr").textContent = t; };
 
 let toastTimer = 0;
+let toastOut = 0;
+function hideToast(t: HTMLElement) {
+  t.classList.add("out");
+  toastOut = window.setTimeout(() => { t.hidden = true; t.classList.remove("out"); }, reduced() ? 0 : 300);
+}
 /** Kurze Meldung unten (Fehler beim Oeffnen u. ae.); mit `action` ein Knopf dazu (z. B. „Trotzdem laden“) */
 export function toast(msg: string, action?: { label: string; run: () => void }) {
   const t = q(".toast");
   t.replaceChildren(msg);
   if (action) {
     const b = el("button", "toast-a", action.label);
-    b.addEventListener("click", () => { t.hidden = true; action.run(); });
+    b.addEventListener("click", () => { hideToast(t); action.run(); });
     t.append(b);
   }
+  clearTimeout(toastOut);
+  t.classList.remove("out");
   t.hidden = false;
   announce(msg);
   clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => { t.hidden = true; }, action ? 9000 : 4500);
+  toastTimer = window.setTimeout(() => hideToast(t), action ? 9000 : 4500);
 }
 
 /** Text einer Fehlermeldung aus Rust (String oder { message }) */
@@ -86,6 +93,13 @@ export async function copyText(text: string) {
 /** 12400 -> „12.400“ */
 export const num = (n: number) => n.toLocaleString("de-DE");
 
+/** Element mit Austrittsanimation (Klasse `out`) entfernen */
+export function leave(node: HTMLElement, ms = 200) {
+  if (reduced()) { node.remove(); return; }
+  node.classList.add("out");
+  window.setTimeout(() => node.remove(), ms);
+}
+
 export type MenuItem = { icon: IconName; label: string; hint?: string; run: () => void };
 
 /** Kleines Glasmenue unter einem Knopf; schliesst bei Klick daneben, Esc oder Auswahl */
@@ -93,7 +107,7 @@ export function menu(anchor: HTMLElement, items: MenuItem[]) {
   document.querySelector(".menu")?.remove();
   const m = el("div", "menu n-glass n-liquid panel");
   m.setAttribute("role", "menu");
-  const close = () => { m.remove(); document.removeEventListener("pointerdown", away, true); document.removeEventListener("keydown", key, true); };
+  const close = () => { leave(m); document.removeEventListener("pointerdown", away, true); document.removeEventListener("keydown", key, true); window.removeEventListener("resize", close); };
   const away = (e: Event) => { if (!m.contains(e.target as Node)) close(); };
   const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
   for (const it of items) {
@@ -110,6 +124,7 @@ export function menu(anchor: HTMLElement, items: MenuItem[]) {
   m.style.left = `${Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth))}px`;
   document.addEventListener("pointerdown", away, true);
   document.addEventListener("keydown", key, true);
+  window.addEventListener("resize", close); // der Anker wandert mit der Fenstergroesse: lieber schliessen als falsch haengen
   m.querySelector<HTMLElement>("button")?.focus();
 }
 

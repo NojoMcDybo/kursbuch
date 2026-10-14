@@ -25,6 +25,8 @@ export class Courses {
   private ov: Overview | null = null;
   private sem = "";
   private news = new Map<number, number>();
+  /** Zeilen steigen nacheinander auf: beim ersten Zeichnen und beim Semesterwechsel, nicht bei jeder kleinen Aenderung */
+  private enter = true;
 
   constructor(private o: CoursesOpts) {
     this.el.setAttribute("aria-label", "Kurse");
@@ -63,6 +65,7 @@ export class Courses {
     if (s === this.sem) return;
     this.sem = s;
     try { localStorage.setItem("kursbuch-sem", s); } catch { /* egal */ }
+    this.enter = true;
     this.draw();
   }
 
@@ -82,6 +85,12 @@ export class Courses {
       b.addEventListener("click", () => this.o.onOpen(c.id));
       return b;
     });
+    rows.forEach((r, i) => r.style.setProperty("--i", String(i)));
     this.el.replaceChildren(head, ...rows);
+    if (this.enter && rows.length) {
+      this.enter = false;
+      this.el.classList.add("enter");
+      window.setTimeout(() => this.el.classList.remove("enter"), 600 + rows.length * 30);
+    }
   }
 }

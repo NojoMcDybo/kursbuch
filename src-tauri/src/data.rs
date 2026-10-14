@@ -1,7 +1,7 @@
 //! Liest den Stand der Python-Seite (State, Konfiguration) und baut daraus die Ansichten.
 //! Die App schreibt hier nichts; Aenderungen laufen ueber die CLI (ab Phase 4).
 
-use crate::model::{semester_rank, split_name, Cm, Config, CourseRec, State};
+use crate::model::{course_kind, semester_rank, split_name, Cm, Config, CourseRec, State};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -116,6 +116,8 @@ pub struct CourseCard {
     pub title: String,
     pub semester: Option<String>,
     pub teacher: Option<String>,
+    /// vorlesung | seminar | uebung, wenn der Titel es verraet
+    pub kind: Option<&'static str>,
     /// Farbton des Kurses (0-359, bleibt gleich)
     pub hue: u16,
     pub activities: usize,
@@ -139,6 +141,7 @@ pub fn overview(paths: &Paths) -> Overview {
             let cms: Vec<&Cm> = c.cms.values().filter(|m| visible(m)).collect();
             CourseCard {
                 id: c.id,
+                kind: course_kind(&n.title),
                 title: n.title,
                 semester: n.semester,
                 teacher: n.teacher,

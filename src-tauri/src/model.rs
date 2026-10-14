@@ -123,6 +123,21 @@ pub fn split_name(full: &str) -> Name {
     Name { title: if title.is_empty() { full.to_string() } else { title }, semester: Some(canonical(&full[a..b])), teacher }
 }
 
+/// Art der Veranstaltung aus dem Titel: vorlesung | seminar | uebung (sonst keine Angabe)
+pub fn course_kind(title: &str) -> Option<&'static str> {
+    let t = title.to_lowercase();
+    let word = |w: &str| t.split(|c: char| !c.is_alphanumeric()).any(|x| x == w);
+    if word("vl") || t.contains("vorlesung") || t.contains("lecture") {
+        Some("vorlesung")
+    } else if t.contains("seminar") || t.contains("kolloquium") || t.contains("colloquium") || t.contains("workshop") {
+        Some("seminar")
+    } else if t.contains("übung") || t.contains("uebung") || t.contains("tutorium") || t.contains("tutorial") || t.contains("exercise") {
+        Some("uebung")
+    } else {
+        None
+    }
+}
+
 /// Sortierwert: neueres Semester zuerst (WiSe 2026/27 vor SoSe 2026), ohne Semester = 0
 pub fn semester_rank(sem: Option<&str>) -> i32 {
     let Some(s) = sem else { return 0 };
@@ -171,6 +186,15 @@ mod tests {
         assert_eq!(n("MySoSe 2026 Kurs").1, None); // kein Wortanfang
         assert_eq!(n("SoSe 2026").0, "SoSe 2026"); // nur ein Semester: nicht zu leerem Titel machen
         assert_eq!(n("Kurs WiSe 2099 x").1.as_deref(), Some("WiSe 2099/00")); // Jahrhundertwechsel ohne Absturz
+    }
+
+    #[test]
+    fn course_kind_from_real_titles() {
+        for (t, k) in [("VL Sportpsychologie", Some("vorlesung")), ("VL Unterrichten im Sport", Some("vorlesung")), ("Lecture: Intro", Some("vorlesung")), ("Unterrichten im Sport - Begleitseminare", Some("seminar")),
+            ("Hauptseminar Taktik", Some("seminar")), ("Statistik Übung", Some("uebung")), ("Tutorium Mathe", Some("uebung")), ("Introduction to English Linguistics II (Group III)", None),
+            ("Task Design - Group I", None), ("Tennis Plus", None), ("Wahlverfahren Sportwissenschaft", None), ("Evolution", None), ("", None)] {
+            assert_eq!(course_kind(t), k, "{t}");
+        }
     }
 
     #[test]

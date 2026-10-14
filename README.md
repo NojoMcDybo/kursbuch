@@ -1,6 +1,6 @@
 # Kursbuch
 
-LearnWeb (Uni Münster) im Nojo-Ökosystem: ein Dashboard über die ganze Fensterbreite mit Zeitstrahl, Kalender, den Kursen
+LearnWeb (Uni Münster) im Nojo-Ökosystem: ein Dashboard über die ganze Fensterbreite mit Zeitstrahl, Wochenkalender samt Stundenplan, den Kursen
 des gewählten Semesters und Fristen. Arbeitet auf den **lokalen** Daten des Syncs. Tauri v2 + Rust + Vanilla-TS, Design aus
 `D:\Dev\nojo-design` (Kopie unter `src/nojo/`, aktualisieren mit
 `powershell -File D:\Dev\nojo-design\tools\sync.ps1 -Only kursbuch`).
@@ -13,8 +13,7 @@ Auftrag und Entscheidungen: `C:\Users\nojod\learnweb-mcp\docs\desktop-app-prompt
 ┌ Leiste: Konto · Semester │ Notch-Zone (frei) │ Lupe · Fensterknöpfe ┐   auf dem farbigen Nebel
 ╭──────────────────── große matte Fläche, runde obere Ecken ───────────╮   schließt mit den Fensterrändern ab
 │ Zeitstrahl                                                           │
-│ Kurse │ Stundenplan                              │ Kalender          │
-│       │                                          │ Abgaben           │
+│ Kurse │ Stundenplan + Wochenkalender (eine Woche)│ Abgaben           │
 ```
 
 Liquid Glass tragen nur **Knöpfe und ausgewählte Elemente** (Konto, Semester, Lupe, Fensterknöpfe, Menüs, das Suchfenster);
@@ -30,19 +29,31 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
   schließt sich in sie. Details unten.
 - **Zeitstrahl** (`timeline.ts`): ohne Rahmen, minimalistisch. Fischauge: 14 Tage im Fokus mit Tagesraster, links Vergangenheit und
   rechts Zukunft logarithmisch gestaucht. Heute ist eine gefüllte Pille und ein hoher, weich leuchtender Strich über die ganze
-  Höhe. Mausrad, Ziehen, Pfeile (Umschalt = Woche), Home/„Heute“ verschieben den Fokus; ein Tag im Kalender holt ihn in die Mitte.
+  Höhe. Mausrad, Ziehen, Pfeile (Umschalt = Woche), Home/„Heute“ verschieben den Fokus; ein Tag im Wochenkalender holt ihn in die Mitte.
 - **Kurse** (`courses.ts`, links): die Kurse des gewählten Semesters; ein Klick öffnet den Kurs in einem **eigenen Fenster**.
   Hinter dem Kurs steht die Zahl neuer oder aktualisierter Aktivitäten, das Haken-Symbol setzt sie zurück.
-- **Stundenplan** (`timetable.ts`, `timetable.rs`, Mitte): Woche Mo–Fr (Sa/So nur mit Einträgen), Stunden senkrecht, die
-  Stundenhöhe wächst mit dem Fenster. Eintrag **selbst schreiben** (leere Stelle anklicken oder +), **importieren** (.ics; wöchentliche
+- **Stundenplan und Wochenkalender in einem** (`timetable.ts`, `timetable.rs`, Mitte): immer **eine Woche**, anfangs die aktuelle, mit Pfeilen,
+  Kalenderwoche und „Heute“ (die Zahl eines Tages holt ihn in den Zeitstrahl). Mo–Fr stehen immer da, **Samstag und Sonntag schieben sich ein**,
+  sobald dort ein Eintrag oder Termin liegt (oder heute ist). Der **wöchentliche Stundenplan** steht in jeder Woche als Blöcke (Stunden senkrecht,
+  die Stundenhöhe wächst mit dem Fenster), die **Termine von LearnWeb** dieser Woche als Pillen unter dem Tag (Kursfarbe, Klick öffnet den Kurs).
+  Eintrag **selbst schreiben** (leere Stelle anklicken oder +), **importieren** (.ics; wöchentliche
   Ereignisse, einzelne Termine desselben Musters ab zwei Mal; Titel werden einem Kurs des Semesters zugeordnet, wenn genau einer
   passt; Übersprungenes wird gezählt) und **exportieren** (.ics in „Downloads“ mit wöchentlicher Wiederholung über einen wählbaren
   Zeitraum, Europe/Berlin samt VTIMEZONE, Kursname und LearnWeb-Link in der Beschreibung; für Apple und Google Kalender). Ein Klick
   auf einen Eintrag schiebt eine Karte nach vorn (wächst aus dem Eintrag): Zeit, Raum, Dozent, nächster Termin, Dateien, Neues,
   **Kurs** (Kursseite in Kursbuch) und **LearnWeb** (die echte Webseite), dazu Bearbeiten und Löschen. Gespeichert wird je Semester in
   `timetable.json` im App-Ordner (eine unlesbare Datei wird als `.defekt` beiseitegelegt, nie überschrieben).
-- **Kalender, Abgaben** (`calendar.ts`, `abgaben.ts`, rechts, ohne Karte): Monatsraster mit Punkten je Kurs; darunter Fristen und
-  Prüfungen der nächsten zwei Wochen mit Restzeit (unter 48 Stunden bernsteinfarben, überfällig rot).
+- **Abgaben** (`abgaben.ts`, rechts, ohne Karte): Fristen und Prüfungen der nächsten zwei Wochen mit Restzeit (unter 48 Stunden
+  bernsteinfarben, überfällig rot).
+- **Automatische Erkennung** (`learnweb/schedule.py`, `schedule.rs`, `syncui.ts`): Nach der Anmeldung läuft der Abgleich von selbst (Fortschritt auf dem
+  Anmeldebild, später der Knopf mit den zwei Pfeilen in der Leiste; beim Start gleicht Kursbuch ab, wenn der Stand älter als 20 Stunden ist).
+  Kurse: `kurse_ab: "auto"` nimmt das vorige und das laufende Semester. Farben: jeder Kurs bekommt seinen Farbton selbst (`colors.rs`).
+  Kursart (Vorlesung, Seminar, Übung): aus dem Titel. **Wochentage** der Veranstaltungen: aus mindestens zwei wöchentlich liegenden
+  Sitzungsterminen des Kurses; die **Uhrzeit** nur, wenn sie in einem LearnWeb-Text bei einem Wochentag steht („Mo 10–12“, c.t./s.t.;
+  Sprechstunde, Abgabe, Klausur und Zoom zählen nicht). LearnWeb nennt Vorlesungszeiten selten: Funde mit Uhrzeit legt der Stundenplan
+  selbst an (✦, Quelle in der Karte), Funde ohne Uhrzeit stehen als Chips über dem Plan; ein Klick bietet Doppelstunden (8–10, 10–12 …)
+  oder eine eigene Zeit an, ✕ verwirft den Fund für immer (`schedule-dismissed.json`). Was man löscht oder ändert, kommt nicht wieder.
+  Nicht enthalten: Import aus LSF/HISinOne (dafür gibt es den .ics-Import).
 - **Kursfenster** (`coursewin.ts`, `coursepage.ts`, `windows.rs`): `index.html?kurs=<id>` (`kurs-<id>` als Fenster, ein zweiter
   Klick holt es nach vorn und zeigt die gewünschte Stelle). Die Kursseite ist eine fortlaufende Seite ohne Karten; Zeilen:
   Datei öffnen, kopieren, laden („zu groß“ lädt ein Klick trotzdem); neue Aktivitäten tragen einen Punkt. Das Design der Kursseite
@@ -62,11 +73,14 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
   (25 / 5 min einstellbar, nach vier Runden die dreifache Pause; nichts startet von selbst) und **Lernstreak** (Tage in Folge mit einer
   abgeschlossenen Fokusphase, Raster der letzten 12 Wochen). Alles liegt in `focus.json` im App-Ordner.
 - **Pomodoro-Widget** (`widget.ts`, `widget.rs`): Beim Start öffnet sich ein eigenes Fenster ohne Rahmen, durchsichtig, immer oben, überall verschiebbar
-  (die Lage wird gemerkt). Es zeigt den Timer des Hauptfensters und steuert ihn (Pause, Weiter, Überspringen, Stopp); Stopp schließt es. Dazu die
+  (die Lage wird gemerkt). Es zeigt den Timer des Hauptfensters und steuert ihn (Pause, Weiter, Überspringen, Stopp); Stopp schließt es; der Knopf mit dem Auge in der Leiste (sichtbar bei laufendem Timer und im Fokus-Modus) und der kleine
+  Knopf im Widget blenden es aus und wieder ein (der Timer läuft weiter, die Wahl wird gemerkt). Dazu die
   Karte `kursbuch:pomodoro` in der Notch (Wert, Balken, Knöpfe; `pomodoro.rs`). Schließt man das Hauptfenster, endet die App.
 - **Hintergrund**: Der Knopf mit der Sonne in der Leiste wechselt zwischen dem bewegten Farbverlauf und einem weichen Beige (Anmeldebild, Fokus,
   Leiste und Widget; die dunkle Fläche bleibt dunkel). **Schrift**: Nunito Sans (variable, OFL, mit der App gebündelt).
-- **Größen**: ab 960 px drei Spalten; darunter werden Kalender und Abgaben eine Schublade (Knopf in der Leiste). F11 = Vollbild.
+- **Größen und Bewegung**: ab 960 px drei Spalten; darunter werden die Abgaben eine Schublade (Knopf in der Leiste); sehr breite und
+  niedrige Fenster passen Abstände und Schrift an. Hover und Klick ändern nie die Größe (Inhalt rückt per `translate`, Schriftstärke bleibt gleich),
+  Menüs, Karten und Meldungen blenden ein und aus, Listen steigen nacheinander auf; „Bewegung reduzieren“ des Systems wird beachtet. F11 = Vollbild.
 - **Notch** (`notch-align.ts`, `notch.rs`): Liegt die Notch über der Leiste, teilt sie sich links und rechts von ihr (Zone ab
   `--nz-x`, Breite `--nz-w`); seitlich angedockt halten Leiste und Fläche Abstand. Dazu die Karte `kursbuch:frist` (nächste Frist
   oder Prüfung).
@@ -107,7 +121,7 @@ Adressen aus Kurstexten mit Fundstelle. Verweise öffnen im Browser (nur http, h
 
 ## Deep Link
 
-`kursbuch://heute` (Zeitstrahl und Kalender auf heute), `kursbuch://kurs/<id>` (Kursfenster öffnen),
+`kursbuch://heute` (Zeitstrahl und Woche auf heute), `kursbuch://kurs/<id>` (Kursfenster öffnen),
 `kursbuch://suche/<Begriff>` (Suche öffnen und ausführen). Ein Link darf nur **navigieren**; alles Verformte wird ignoriert. Ein zweiter Start
 reicht ihn an die laufende App weiter. Die App meldet das Schema beim Start an (im Entwicklungsbetrieb: `target\debug`).
 
@@ -125,7 +139,8 @@ ojo-updater.key`) und hängt Installer und `latest.json` an das Release. Einmali
 und das Secret setzen (`gh secret set TAURI_SIGNING_PRIVATE_KEY < %USERPROFILE%\.tauri
 ojo-updater.key`).
 
-Lokal bauen: `npx tauri build --bundles nsis` (Installer unter `src-tauri	argeteleaseundle
+Lokal bauen: `npx tauri build --bundles nsis` (Installer unter `src-tauri	arget
+eleaseundle
 sis`, bei fremdem `CARGO_TARGET_DIR` dort).
 Installer per Explorer starten (die Claude-App läuft virtualisiert); Installation außerhalb von AppData: `Kursbuch_…-setup.exe /S /D=D:\Dev\_apps\Kursbuch`.
 
@@ -143,4 +158,5 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Phase 4: Suche (Volltext, „Tief“), Verzeichnis für Claude/ChatGPT (`_Verzeichnis.md`), „Für KI kopieren“, Sofort-Download.
 - Umbau 2 (2026-10-14): Leiste + große matte Fläche, Liquid Glass nur für Knöpfe, Stundenplan (schreiben, .ics importieren/exportieren), Kurse in eigenen Fenstern, Konto-Anmeldung, Suchfenster aus der Lupe.
 - Umbau 3: Pomodoro-Widget, Beige-Hintergrund, Nunito Sans, Selbst-Update (v0.2.0), Inhalte ohne Datei im Kursfenster.
+- Umbau 4 (v0.3.0): Stundenplan und Wochenkalender in einem, automatische Erkennung von Kursen, Farben, Wochentagen und Zeiten, Abgleich aus der App mit Fortschritt, Widget ausblendbar, ruhigere Abstände und Animationen.
 - Phase 5: KI (Laya): Termine und Fristen aus Folien als Vorschläge. Phase 6: Sync aus der App, Einstellungen, Installer.

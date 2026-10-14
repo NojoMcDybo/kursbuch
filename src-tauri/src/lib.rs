@@ -14,6 +14,7 @@
 //! - account.rs: LearnWeb-Anmeldung ueber die Python-Seite (Zugangsdaten im Windows-Tresor, nie in der App)
 //! - windows.rs: Kurse in eigenen Fenstern (`kurs-<id>`)
 //! - focus.rs:  To-do-Listen, Pomodoro-Einstellungen, Lernstreaks (focus.json); pomodoro.rs: der Timer als Live Activity der Notch
+//! - sync.rs:   Sync aus der App (Python-Seite, Fortschritt als Ereignis); schedule.rs: erkannte Regeltermine (Wochentag, Uhrzeit)
 //! - store.rs:  kleine JSON-Ablage im App-Ordner
 //! - widget.rs: Pomodoro-Widget (eigenes Fenster ohne Rahmen, immer oben); update.rs: Selbst-Update ueber GitHub Releases
 //! - content.rs: Ankuendigungen, Aufgaben, Dozenten aus data/content.json (Python-Seite)
@@ -34,9 +35,11 @@ mod notch;
 mod open;
 mod pomodoro;
 mod py;
+mod schedule;
 mod search;
 mod share;
 mod store;
+mod sync;
 mod timetable;
 mod update;
 mod visits;
@@ -151,6 +154,10 @@ pub fn run() {
             update::update_state,
             update::update_check,
             update::update_install,
+            sync::sync_start,
+            sync::sync_running,
+            schedule::schedule_get,
+            schedule::schedule_dismiss,
         ])
         .setup(|app| {
             let h = app.handle().clone();

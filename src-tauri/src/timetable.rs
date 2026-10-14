@@ -35,6 +35,12 @@ pub struct Entry {
     /// Kurs-ID aus LearnWeb, wenn der Eintrag zu einem Kurs gehoert
     #[serde(default)]
     pub course: Option<i64>,
+    /// automatisch erkannt (Regeltermine aus LearnWeb) statt selbst eingetragen
+    #[serde(default)]
+    pub auto: bool,
+    /// bei erkannten Eintraegen: woher (Quelle und Sicherheit)
+    #[serde(default)]
+    pub note: String,
 }
 
 pub type Plans = BTreeMap<String, Vec<Entry>>;
@@ -48,7 +54,7 @@ pub fn validate(entries: &[Entry]) -> Result<(), String> {
         if e.id.is_empty() || e.id.chars().count() > 64 || !ids.insert(&e.id) {
             return Err("Ungültige Eintrags-ID.".into());
         }
-        if e.title.trim().is_empty() || e.title.chars().count() > 120 || e.room.chars().count() > 80 {
+        if e.title.trim().is_empty() || e.title.chars().count() > 120 || e.room.chars().count() > 80 || e.note.chars().count() > 300 {
             return Err("Titel (höchstens 120 Zeichen) und Raum (höchstens 80) prüfen.".into());
         }
         if e.day > 6 || e.start >= e.end || e.end > 1440 {
@@ -295,7 +301,7 @@ pub fn from_ics(text: &str) -> Result<Imported, String> {
     keys.sort_by(|a, b| (a.1, a.2, &a.0).cmp(&(b.1, b.2, &b.0)));
     keys.dedup();
     let stamp = Utc::now().timestamp_nanos_opt().unwrap_or_default();
-    let entries = keys.into_iter().enumerate().take(MAX_ENTRIES).map(|(i, (title, day, start, end, room))| Entry { id: format!("i{stamp:x}-{i}"), title, day, start, end, room, course: None }).collect();
+    let entries = keys.into_iter().enumerate().take(MAX_ENTRIES).map(|(i, (title, day, start, end, room))| Entry { id: format!("i{stamp:x}-{i}"), title, day, start, end, room, course: None, auto: false, note: String::new() }).collect();
     Ok(Imported { entries, skipped })
 }
 
@@ -357,7 +363,7 @@ mod tests {
     use super::*;
 
     fn e(id: &str, title: &str, day: u8, start: u16, end: u16, room: &str) -> Entry {
-        Entry { id: id.into(), title: title.into(), day, start, end, room: room.into(), course: None }
+        Entry { id: id.into(), title: title.into(), day, start, end, room: room.into(), course: None, auto: false, note: String::new() }
     }
 
     fn d(s: &str) -> NaiveDate {

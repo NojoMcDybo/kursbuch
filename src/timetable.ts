@@ -1,12 +1,15 @@
 /**
- * Stundenplan (Mitte): Woche Montag bis Freitag (Samstag und Sonntag nur, wenn es dort Eintraege gibt), Stunden senkrecht.
+ * Stundenplan und Wochenkalender in einem (Mitte): immer eine Woche, anfangs die aktuelle, mit Pfeilen, Kalenderwoche und „Heute“.
+ * Montag bis Freitag stehen da, Samstag und Sonntag schieben sich ein, sobald dort etwas liegt (Plan oder Termin von LearnWeb) oder
+ * heute ist. Der woechentliche Stundenplan steht in jeder Woche als Bloecke (Stunden senkrecht); die Termine von LearnWeb dieser Woche
+ * stehen als Pillen unter dem Tag. Eintraege des Plans werden selbst geschrieben.
  * Eintraege schreibt man selbst (leere Stelle anklicken oder das Plus), importiert sie aus einer .ics-Datei oder exportiert sie fuer
  * Apple- und Google-Kalender. Ein Klick auf einen Eintrag schiebt eine Karte nach vorn: Zeit, Ort, naechster Termin, Dateien,
  * Neues und Verweise auf die Kursseite in Kursbuch und auf LearnWeb. Gespeichert wird je Semester (Rust: timetable.rs).
  */
 
-import { api, type CourseCard, type Entry, type Ev, type Plans } from "./api";
-import { left, urgency, weekdayIndex } from "./dates";
+import { api, type CourseCard, type Entry, type Ev, type Plans, type Suggestion } from "./api";
+import { dateOf, dayOfTs, isoWeek, left, MON, mondayOf, todayDay, urgency, weekdayIndex } from "./dates";
 import { KIND_ICON } from "./timeline";
 import { act, el, hsl, ico, iconBtn, message, morph, shortSem, toast } from "./ui";
 
@@ -28,7 +31,12 @@ export type TimetableOpts = {
   newOf: (course: number) => number;
   openCourse: (course: number) => void;
   openWeb: (course: number) => void;
+  /** Tag im Zeitstrahl zeigen (Klick auf das Datum) */
+  onPick: (day: number) => void;
 };
+
+/** Doppelstunden an Universitaeten: 8–10, 10–12 … (Vorschlaege fuer erkannte Wochentage ohne Uhrzeit) */
+const BLOCKS = [480, 600, 720, 840, 960, 1080];
 
 export class Timetable {
   readonly el = el("section", "tt");
@@ -38,8 +46,20 @@ export class Timetable {
   private scroll = el("div", "tt-scroll");
   private layer = el("div", "tt-layer");
   private file = el("input");
+  private tray = el("div", "tt-sug");
+  private sugs: Suggestion[] = [];
   private closeLayer: (() => Promise<void>) | null = null;
   private scrolled = "";
+  private ready: Promise<void>;
+  /** Stand, zu dem die Bloecke zuletzt eingeglitten sind (nur bei neuem Plan, nicht bei jedem Neuzeichnen) */
+  private popped = "";
+  /** Montag der angezeigten Woche (Tageszahl) */
+  private monday = mondayOf(todayDay());
+  private events: Ev[] = [];
+  /** Richtung des letzten Wochenwechsels (fuer die Gleitbewegung) */
+  private dir = 0;
+  /** Termine unter den Tagen: alle statt der ersten drei */
+  private more = false;
 
   constructor(private o: TimetableOpts) {
     this.file.type = "file";
@@ -47,9 +67,9 @@ export class Timetable {
     this.file.hidden = true;
     this.file.addEventListener("change", () => void this.importFile());
     this.layer.hidden = true;
-    this.el.append(this.bar, this.scroll, this.layer, this.file);
+    this.el.append(this.bar, this.tray, this.scroll, this.layer, this.file);
     this.layer.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); void this.close(); } });
-    void this.reload();
+    this.ready = this.reload();
     window.setInterval(() => this.draw(), 60_000); // die Linie „jetzt“ wandert
     let h = this.scroll.clientHeight;
     new ResizeObserver(() => { if (Math.abs(this.scroll.clientHeight - h) > 1) { h = this.scroll.clientHeight; this.draw(); } }).observe(this.scroll);
@@ -58,6 +78,77 @@ export class Timetable {
   async reload() {
     this.plans = await api.timetableGet().catch((e) => { toast(message(e)); return {} as Plans; });
     this.draw();
+  }
+
+  /** Erkannte Regeltermine (Python: schedule.py): mit Uhrzeit legt der Plan sie selbst an, ohne fragt er danach */
+  setSuggestions(list: Suggestion[]) {
+    this.sugs = list;
+    // erst wenn der gespeicherte Plan da ist, sonst wuerde er mit den Funden ueberschrieben
+    void this.ready.then(() => { void this.applySuggestions(); this.drawTray(); });
+  }
+
+  private mine() { return this.sugs.filter((s) => s.semester === this.sem && !this.entries.some((e) => e.course === s.course && e.day === s.weekday)); }
+
+  private async applySuggestions() {
+    const add: Entry[] = this.mine().filter((s) => s.start != null && s.end != null).map((s) => ({
+      id: `a${s.course}d${s.weekday}`, title: s.title, day: s.weekday, start: s.start!, end: s.end!, room: s.room ?? "", course: s.course, auto: true, note: `${s.source} (Sicherheit: ${s.confidence})`,
+    }));
+    if (add.length && this.sem) await this.save([...this.entries, ...add]);
+  }
+
+  /** Erkannte Wochentage ohne Uhrzeit: Chips ueber dem Plan; ein Klick fragt nach der Uhrzeit */
+  private drawTray() {
+    const open = this.mine().filter((s) => s.start == null);
+    const chips = open.map((s) => {
+      const c = this.o.card(s.course);
+      const w = el("div", "sug");
+      w.style.setProperty("--c", c ? hsl(c.hue) : "rgba(200,205,215,.9)");
+      const b = el("button", "sug-b");
+      b.title = `${s.source}
+Sicherheit: ${s.confidence}
+Uhrzeit wählen`;
+      b.append(el("i", "sug-dot"), el("span", "sug-d", DAYS[s.weekday]), el("span", "sug-t", s.title), el("small", "", "Uhrzeit?"));
+      b.addEventListener("click", () => this.suggestForm(s, b.getBoundingClientRect()));
+      const x = iconBtn("close", "Nicht anzeigen", "n-ico sm sug-x", () => { this.sugs = this.sugs.filter((y) => y.key !== s.key); act(api.scheduleDismiss(s.key)); this.drawTray(); });
+      w.append(b, x);
+      return w;
+    });
+    this.tray.replaceChildren(...chips);
+    this.tray.classList.toggle("has", chips.length > 0);
+  }
+
+  private suggestForm(s: Suggestion, from: DOMRect) {
+    const form = el("form", "tf tx");
+    form.noValidate = true;
+    form.append(el("h3", "", `${s.title} · ${DAYS[s.weekday]}`), el("p", "tf-src", `Erkannt: ${s.source}.`));
+    const grid = el("div", "tf-blocks");
+    const pick = (start: number, end: number) => {
+      const entry: Entry = { id: `a${s.course}d${s.weekday}`, title: s.title, day: s.weekday, start, end, room: s.room ?? "", course: s.course, auto: false, note: s.source };
+      void this.close();
+      void this.save([...this.entries.filter((x) => x.id !== entry.id), entry]);
+    };
+    for (const b of BLOCKS) {
+      const t = el("button", "n-btn", `${String(b / 60).padStart(2, "0")}–${String(b / 60 + 2).padStart(2, "0")}`);
+      t.type = "button";
+      t.addEventListener("click", () => pick(b, b + 120));
+      grid.append(t);
+    }
+    const t1 = el("input", "n-input"), t2 = el("input", "n-input");
+    for (const [t, v, label] of [[t1, 600, "Von"], [t2, 720, "Bis"]] as const) { t.type = "time"; t.step = "300"; t.value = hm(v); t.setAttribute("aria-label", label); }
+    const times = el("div", "tf-times");
+    times.append(t1, el("span", "", "–"), t2);
+    const err = el("p", "tf-err");
+    const go = el("button", "n-btn primary", "Eigene Zeit übernehmen");
+    go.type = "submit";
+    form.append(grid, times, err, el("footer", "tf-a"));
+    form.querySelector(".tf-a")!.append(go);
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const [a, b] = [parseHm(t1.value), parseHm(t2.value)];
+      if (!(a >= 0 && b > a && b <= 1440)) { err.textContent = "Die Uhrzeit passt nicht (Ende nach Beginn)."; return; }
+      pick(a, b);
+    });
+    void this.open(form, from);
   }
 
   /** Kursfarben, Namen und Zahlen haben sich geaendert */
@@ -69,6 +160,7 @@ export class Timetable {
     this.sem = s;
     void this.close();
     this.draw();
+    void this.ready.then(() => this.applySuggestions());
   }
 
   private get entries(): Entry[] { return this.plans[this.sem] ?? []; }
@@ -89,6 +181,38 @@ export class Timetable {
   private draw() {
     this.drawBar();
     this.drawGrid();
+    this.drawTray();
+  }
+
+  /** Termine von LearnWeb (Kalenderdaten) */
+  setEvents(list: Ev[]) { this.events = list; this.draw(); }
+
+  /** Tag zeigen (auch von aussen); die Woche folgt */
+  pick(day: number, notify = false) {
+    const m = mondayOf(day);
+    this.dir = Math.sign(m - this.monday);
+    this.monday = m;
+    this.draw();
+    if (notify) this.o.onPick(day);
+  }
+
+  today() { this.pick(todayDay(), true); }
+
+  private go(weeks: number) {
+    this.monday += weeks * 7;
+    this.dir = weeks;
+    this.draw();
+  }
+
+  /** Termine dieser Woche je Wochentag (0 = Montag) */
+  private week(): Ev[][] {
+    const out: Ev[][] = [[], [], [], [], [], [], []];
+    for (const e of this.events) {
+      const i = dayOfTs(e.ts) - this.monday;
+      if (i >= 0 && i < 7) out[i].push(e);
+    }
+    for (const l of out) l.sort((a, b) => a.ts - b.ts);
+    return out;
   }
 
   private drawBar() {
@@ -102,25 +226,76 @@ export class Timetable {
       exp,
       iconBtn("plus", "Neuer Eintrag", "n-ico sm n-glass n-liquid", () => this.editor({ day: Math.min(4, weekdayIndex(new Date())), start: 600, end: 720 })),
     );
-    this.bar.replaceChildren(title, acts);
+    const first = dateOf(this.monday), last = dateOf(this.monday + 6);
+    const range = first.getMonth() === last.getMonth() ? `${first.getDate()}.–${last.getDate()}. ${MON[last.getMonth()]}` : `${first.getDate()}. ${MON[first.getMonth()]} – ${last.getDate()}. ${MON[last.getMonth()]}`;
+    const wk = el("button", "tt-wk");
+    wk.title = "Zur aktuellen Woche";
+    wk.append(el("b", "", `KW ${isoWeek(first)}`), el("small", "", range));
+    wk.addEventListener("click", () => this.today());
+    const cur = this.monday === mondayOf(todayDay());
+    const back = iconBtn("kalender", "Heute", `n-ico sm n-glass n-liquid tt-t${cur ? " gone" : ""}`, () => this.today());
+    back.tabIndex = cur ? -1 : 0;
+    const nav = el("div", "tt-nav");
+    nav.append(iconBtn("prev", "Vorherige Woche", "n-ico sm n-glass n-liquid", () => this.go(-1)), wk, back, iconBtn("next", "Nächste Woche", "n-ico sm n-glass n-liquid", () => this.go(1)));
+    this.bar.replaceChildren(title, nav, acts);
+  }
+
+  /** Pille eines Termins von LearnWeb */
+  private chip(e: Ev) {
+    const r = el("button", "tt-ev");
+    const c = this.o.card(e.course);
+    r.style.setProperty("--c", c ? hsl(c.hue) : "rgba(200,205,215,.9)");
+    const time = e.allDay ? "" : new Date(e.ts * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    const head = el("span", "tt-eh");
+    head.append(ico(KIND_ICON[e.kind]), el("small", "", time));
+    r.append(head, el("span", "tt-ex", e.short));
+    r.title = `${e.title}${time ? `
+${time}` : ""}`;
+    r.addEventListener("click", () => { if (e.course != null) this.o.openCourse(e.course); });
+    return r;
   }
 
   private drawGrid() {
     const list = this.entries;
-    const days = Math.max(5, ...list.map((e) => e.day + 1));
+    const wk = this.week();
+    const todayIdx = todayDay() - this.monday; // 0..6 nur in der aktuellen Woche
+    const weekend = wk.map((l, i) => (l.length ? i + 1 : 0));
+    const days = Math.max(5, ...list.map((e) => e.day + 1), ...weekend, todayIdx >= 5 && todayIdx < 7 ? todayIdx + 1 : 0);
     const from = Math.min(8 * 60, ...list.map((e) => Math.floor(e.start / 60) * 60));
     const to = Math.max(18 * 60, ...list.map((e) => Math.ceil(e.end / 60) * 60));
     const hours = (to - from) / 60;
     const hour = Math.max(HOUR, Math.min(HOUR_MAX, Math.floor((this.scroll.clientHeight - 64) / hours)));
-    const today = weekdayIndex(new Date());
+    const today = todayIdx >= 0 && todayIdx < 7 ? todayIdx : -1;
     const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
 
     const grid = el("div", "tt-grid");
     grid.style.setProperty("--days", String(days));
     grid.style.setProperty("--hour", `${hour}px`);
-    const names = el("div", "tt-names");
+    const names = el("div", "tt-names"), evs = el("div", "tt-evs");
     names.append(el("span"));
-    for (let d = 0; d < days; d++) names.append(el("span", d === today ? "tt-day today" : "tt-day", DAYS[d]));
+    evs.append(el("span"));
+    const cap = this.more ? 99 : this.scroll.clientHeight < 460 ? 1 : 3;
+    let hidden = 0;
+    for (let d = 0; d < days; d++) {
+      const day = this.monday + d;
+      const b = el("button", d === today ? "tt-day today" : "tt-day");
+      b.title = "Im Zeitstrahl zeigen";
+      b.append(el("small", "", DAYS[d]), el("b", "", String(dateOf(day).getDate())));
+      b.addEventListener("click", () => this.o.onPick(day));
+      names.append(b);
+      const cell = el("div", "tt-evc");
+      for (const e of wk[d].slice(0, cap)) cell.append(this.chip(e));
+      hidden += Math.max(0, wk[d].length - cap);
+      evs.append(cell);
+    }
+    const head = el("div", "tt-head");
+    head.append(names, evs);
+    evs.hidden = !wk.some((l, i) => i < days && l.length);
+    if (hidden || this.more) {
+      const m = el("button", "tt-more", this.more ? "Weniger" : `+${hidden} weitere`);
+      m.addEventListener("click", () => { this.more = !this.more; this.draw(); });
+      head.append(m);
+    }
 
     const body = el("div", "tt-body");
     body.style.height = `${hours * hour}px`;
@@ -146,9 +321,20 @@ export class Timetable {
       }
       body.append(col);
     }
-    grid.append(names, body);
+    grid.append(head, body);
+    const pop = `${this.sem}|${list.map((e) => e.id).join()}`;
+    if (this.popped !== pop) {
+      this.popped = pop;
+      grid.classList.add("enter");
+      grid.querySelectorAll<HTMLElement>(".tt-b").forEach((b, i) => b.style.setProperty("--i", String(Math.min(i, 14))));
+      window.setTimeout(() => grid.classList.remove("enter"), 1400);
+    }
     const top = this.scroll.scrollTop;
     this.scroll.replaceChildren(grid);
+    if (this.dir && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      grid.animate([{ opacity: 0, transform: `translateX(${this.dir * 26}px)` }, { opacity: 1, transform: "none" }], { duration: 380, easing: "cubic-bezier(0.22, 1.08, 0.36, 1)" });
+    }
+    this.dir = 0;
     if (!list.length) {
       const empty = el("div", "tt-empty");
       empty.append(ico("kalender", 34), el("p", "", "Noch kein Stundenplan"));
@@ -176,6 +362,7 @@ export class Timetable {
     b.style.width = `calc(${100 / lanes}% - 4px)`;
     b.title = `${e.title}\n${hm(e.start)}–${hm(e.end)}${e.room ? `\n${e.room}` : ""}`;
     b.append(el("span", "tt-bt", e.title), el("span", "tt-bm", `${hm(e.start)}–${hm(e.end)}${e.room ? ` · ${e.room}` : ""}`));
+    if (e.auto) { const a = ico("spark", 11); a.classList.add("tt-auto"); b.append(a); }
     b.addEventListener("click", () => void this.info(e, b.getBoundingClientRect()));
     return b;
   }
@@ -194,11 +381,13 @@ export class Timetable {
     const scrim = el("div", "tt-scrim");
     scrim.addEventListener("pointerdown", () => void this.close());
     this.layer.replaceChildren(scrim, card);
+    this.layer.classList.remove("out");
     this.layer.hidden = false;
     const kids = [...card.children] as HTMLElement[];
     void morph(card, from, kids, true);
     card.querySelector<HTMLElement>("input, button")?.focus({ preventScroll: true });
     this.closeLayer = async () => {
+      this.layer.classList.add("out");
       await morph(card, from, kids, false);
       this.layer.hidden = true;
       this.layer.replaceChildren();
@@ -215,6 +404,7 @@ export class Timetable {
     const fact = (icon: Parameters<typeof ico>[0], text: string, cls = "") => { const li = el("li", cls); li.append(ico(icon), el("span", "", text)); facts.append(li); return li; };
     fact("kalender", `${DAYS[e.day]} · ${hm(e.start)}–${hm(e.end)}`);
     if (e.room) fact("pin", e.room);
+    if (e.auto) { const li = fact("spark", "automatisch erkannt", "ti-new"); li.title = e.note ?? ""; }
     if (c?.teacher) fact("user", c.teacher);
     if (c) {
       const next = this.o.nextOf(c.id);
@@ -242,11 +432,19 @@ export class Timetable {
     const tools = el("div", "ti-t");
     tools.append(
       iconBtn("edit", "Bearbeiten", "n-ico sm", () => { const r = card.getBoundingClientRect(); void this.close().then(() => this.editor(e, r)); }),
-      iconBtn("trash", "Löschen", "n-ico sm danger", () => { void this.close(); void this.save(this.entries.filter((x) => x.id !== e.id)); }),
+      iconBtn("trash", "Löschen", "n-ico sm danger", () => { void this.close(); this.forget(e); void this.save(this.entries.filter((x) => x.id !== e.id)); }),
     );
     foot.append(links, tools);
     card.append(head, facts, foot);
     await this.open(card, from);
+  }
+
+  /** Ein erkannter Eintrag, den man loescht oder aendert, kommt nicht wieder */
+  private forget(e: Entry) {
+    if (!e.auto || e.course == null) return;
+    const key = `${e.course}:${e.day}`;
+    this.sugs = this.sugs.filter((s) => s.key !== key);
+    act(api.scheduleDismiss(key));
   }
 
   /** Formular fuer einen neuen (ohne id) oder bestehenden Eintrag */
@@ -297,7 +495,8 @@ export class Timetable {
       const [s, t] = [parseHm(t1.value), parseHm(t2.value)];
       if (!title.value.trim()) { err.textContent = "Titel fehlt."; title.focus(); return; }
       if (!(s >= 0 && t > s && t <= 1440)) { err.textContent = "Die Uhrzeit passt nicht (Ende nach Beginn)."; return; }
-      const entry: Entry = { id: e.id ?? newId(), title: title.value.trim(), day, start: s, end: t, room: room.value.trim(), course: course.value ? Number(course.value) : null };
+      const entry: Entry = { id: e.id ?? newId(), title: title.value.trim(), day, start: s, end: t, room: room.value.trim(), course: course.value ? Number(course.value) : null, auto: false, note: e.note ?? "" };
+      if (e.auto) this.forget(e as Entry); // eigene Aenderung: die erkannte Vorlage soll nicht zurueckkehren
       void this.close();
       void this.save(e.id ? this.entries.map((x) => (x.id === e.id ? entry : x)) : [...this.entries, entry]);
     });

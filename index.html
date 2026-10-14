@@ -11,7 +11,7 @@
   <body class="n-window">
     <!-- Anmeldebild, Fokus-Modus und Pomodoro: siehe scene.ts. Oben die Leiste (rahmenlos, zum Ziehen): Konto und Semester links, in der Mitte die freie Zone der Notch, rechts Lupe und
          Fensterknoepfe. Darunter eine grosse Flaeche mit runden oberen Ecken, die mit den Fensterraendern abschliesst:
-         Zeitstrahl, dann links die Kurse, in der Mitte der Stundenplan, rechts Kalender und Abgaben. Nur Knoepfe und ausgewaehlte
+         Zeitstrahl, dann links die Kurse, in der Mitte der Stundenplan mit Wochenkalender, rechts die Abgaben. Nur Knoepfe und ausgewaehlte
          Elemente sind Liquid Glass; Flaechen sind matt (main.ts baut alles zusammen). -->
     <div id="dash">
       <header class="top" data-tauri-drag-region>
@@ -21,10 +21,12 @@
         </div>
         <div class="nz" data-tauri-drag-region></div>
         <div class="grp r" data-tauri-drag-region>
+          <button class="n-ico sm n-glass n-liquid syncbtn" title="Mit LearnWeb abgleichen" aria-label="Mit LearnWeb abgleichen"><i data-icon="refresh"></i></button>
+          <button class="n-ico sm n-glass n-liquid wbtn" hidden></button>
           <button class="n-ico sm n-glass n-liquid find" title="Suchen (Strg+K)" aria-label="Suchen"><i data-icon="search"></i></button>
           <button class="n-ico sm n-glass n-liquid bgbtn" title="Hintergrund: bewegter Farbverlauf oder weiches Beige" aria-label="Hintergrund wechseln"><i data-icon="sun"></i></button>
           <button class="n-ico sm n-glass n-liquid fbtn" title="Fokus: To-dos, Pomodoro, Lernstreak" aria-label="Fokus"><i data-icon="timer"></i></button>
-          <button class="n-ico sm n-glass n-liquid drawer" data-drawer="dr" title="Kalender und Abgaben"><i data-icon="kalender"></i></button>
+          <button class="n-ico sm n-glass n-liquid drawer" data-drawer="dr" title="Abgaben"><i data-icon="abgabe"></i></button>
         </div>
       </header>
       <!-- darunter (hinter der dunklen Flaeche): Anmeldebild und Fokus-Ansicht, beide auf dem farbigen Verlauf (scene.ts) -->

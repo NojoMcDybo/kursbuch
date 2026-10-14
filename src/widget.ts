@@ -51,7 +51,8 @@ export async function mountPomodoroWidget() {
   const root = el("div", "pw");
   root.dataset.tauriDragRegion = "";
   for (const e of [dial, face, svg, time, phase, sub]) e.dataset.tauriDragRegion = "";
-  root.append(dial, ctl);
+  const hide = iconBtn("eye-off", "Widget ausblenden (in Kursbuch wieder einblendbar)", "n-ico sm pw-x", () => act("hide"));
+  root.append(dial, ctl, hide);
   document.body.append(root);
 
   const paint = () => {
