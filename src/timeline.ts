@@ -43,7 +43,7 @@ export type TimelineOpts = {
 type Geom = { pad: number; lensPx: number; leftPx: number; rightPx: number; x0: number };
 
 export class Timeline {
-  readonly el = el("section", "tl n-glass big");
+  readonly el = el("section", "tl");
   private cv = el("canvas", "tl-cv");
   private layer = el("div", "tl-layer");
   private tip = el("div", "tl-tip n-glass n-liquid");
@@ -63,9 +63,9 @@ export class Timeline {
     this.el.tabIndex = 0;
     this.el.setAttribute("aria-label", "Zeitstrahl");
     this.tip.hidden = true;
-    const left = iconBtn("prev", "Eine Woche zurück", "n-ico sm tl-btn l", () => this.shift(-7));
-    const right = iconBtn("next", "Eine Woche vor", "n-ico sm tl-btn r", () => this.shift(7));
-    const now = iconBtn("kalender", "Heute", "n-ico sm tl-btn t", () => this.today());
+    const left = iconBtn("prev", "Eine Woche zurück", "n-ico sm n-glass n-liquid tl-btn l", () => this.shift(-7));
+    const right = iconBtn("next", "Eine Woche vor", "n-ico sm n-glass n-liquid tl-btn r", () => this.shift(7));
+    const now = iconBtn("kalender", "Heute", "n-ico sm n-glass n-liquid tl-btn t", () => this.today());
     this.el.append(this.cv, this.layer, left, right, now, this.tip);
     new ResizeObserver(() => this.resize()).observe(this.el);
     this.el.addEventListener("wheel", (e) => {
@@ -145,7 +145,7 @@ export class Timeline {
     this.cv.height = Math.round(this.H * this.dpr);
     this.cv.style.width = `${this.W}px`;
     this.cv.style.height = `${this.H}px`;
-    this.axis = Math.round(this.H * 0.56);
+    this.axis = Math.round(this.H - 56); // darunter: Tageszahl und Wochentag
     this.readColors();
     this.paint();
   }
@@ -191,11 +191,11 @@ export class Timeline {
     // Achse, nach aussen auslaufend
     const grad = ctx.createLinearGradient(g.pad - 20, 0, W - g.pad + 20, 0);
     grad.addColorStop(0, "rgba(255,255,255,0)");
-    grad.addColorStop(0.12, "rgba(255,255,255,.2)");
-    grad.addColorStop(0.88, "rgba(255,255,255,.2)");
+    grad.addColorStop(0.12, "rgba(255,255,255,.16)");
+    grad.addColorStop(0.88, "rgba(255,255,255,.16)");
     grad.addColorStop(1, "rgba(255,255,255,0)");
     ctx.strokeStyle = grad;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(g.pad - 20, axis); ctx.lineTo(W - g.pad + 20, axis); ctx.stroke();
 
     const today = todayDay();
@@ -209,15 +209,15 @@ export class Timeline {
       const first = date.getDate() === 1;
       const past = d < 0;
       if (w >= DAILY) {
-        if (weekdayIndex(date) >= 5) { ctx.fillStyle = "rgba(255,255,255,.04)"; ctx.fillRect(x1, 12, w, H - 24); }
-        if (d === 0) {
-          ctx.save(); ctx.fillStyle = "rgba(117,184,255,.2)"; ctx.beginPath(); ctx.roundRect(x1 + 3, axis + 10, w - 6, 40, 10); ctx.fill(); ctx.restore();
+        if (weekdayIndex(date) >= 5) { ctx.fillStyle = "rgba(255,255,255,.025)"; ctx.fillRect(x1, 12, w, H - 24); }
+        if (d === 0) { // heute: ausgefuellte Pille
+          ctx.save(); ctx.fillStyle = colors.accent; ctx.beginPath(); ctx.roundRect(x1 + 2, axis + 8, w - 4, 44, 12); ctx.fill(); ctx.restore();
         }
-        ctx.fillStyle = d === 0 ? colors.accent : past ? colors.faint : colors.ink;
-        ctx.font = `600 14px ${FONT}`;
+        ctx.fillStyle = d === 0 ? "#10202f" : past ? colors.faint : colors.ink;
+        ctx.font = `${d === 0 ? 700 : 600} 14px ${FONT}`;
         ctx.fillText(String(date.getDate()), (x1 + x2) / 2, axis + 24);
-        ctx.font = `500 10.5px ${FONT}`;
-        ctx.fillStyle = d === 0 ? colors.accent : colors.faint;
+        ctx.font = `${d === 0 ? 650 : 500} 10.5px ${FONT}`;
+        ctx.fillStyle = d === 0 ? "#10202f" : colors.faint;
         ctx.fillText(weekday(date), (x1 + x2) / 2, axis + 40);
         ctx.strokeStyle = "rgba(255,255,255,.18)"; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x1, axis - 4); ctx.lineTo(x1, axis + 5); ctx.stroke();
@@ -243,11 +243,19 @@ export class Timeline {
         }
       }
     }
-    // „heute“ als Strich, auch wenn der Fokus woanders liegt
+    // „heute“ als hoher Strich ueber die ganze Hoehe (leuchtet weich), auch wenn der Fokus woanders liegt
     const xt = this.x(0, g);
     if (xt > g.pad - 20 && xt < W - g.pad + 20) {
-      ctx.strokeStyle = colors.accent; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(xt, axis - 14); ctx.lineTo(xt, axis + 14); ctx.stroke();
+      const line = ctx.createLinearGradient(0, 6, 0, H - 6);
+      line.addColorStop(0, "rgba(117,184,255,0)");
+      line.addColorStop(0.2, colors.accent);
+      line.addColorStop(0.8, colors.accent);
+      line.addColorStop(1, "rgba(117,184,255,0)");
+      ctx.save();
+      ctx.shadowColor = colors.accent; ctx.shadowBlur = 10;
+      ctx.strokeStyle = line; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(xt, 6); ctx.lineTo(xt, H - 6); ctx.stroke();
+      ctx.restore();
     }
   }
 

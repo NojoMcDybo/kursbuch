@@ -1,13 +1,13 @@
 /**
  * Suche in allen Inhalten (Strg+K): Namen von Kursen, Abschnitten und Aktivitaeten und der Text aller Dateien
- * (PDF, DOCX, PPTX) mit Seitenzahl. „Schnell“ sucht beim Tippen (alle Woerter muessen vorkommen); „Tief“ erst nach Enter und
+ * (PDF, DOCX, PPTX) mit Seitenzahl. Das Fenster oeffnet sich aus der Lupe in die Mitte (Liquid Glass) und schliesst sich in sie. „Schnell“ sucht beim Tippen (alle Woerter muessen vorkommen); „Tief“ erst nach Enter und
  * weiter gefasst (Wortstaemme, ein Wort genuegt, Dokumente nach Dichte; die KI-Neubewertung folgt spaeter). Treffer sind
  * nach Kurs gruppiert; Pfeile und Enter oeffnen, die Knoepfe rechts kopieren die Datei oder zeigen sie im Kurs.
  */
 
 import { api, type Found, type Hit, type HitKind } from "./api";
 import type { IconName } from "./nojo/nojo-ui";
-import { act, copyText, el, hsl, ico, iconBtn, menu, message, num, toast } from "./ui";
+import { act, copyText, el, hsl, ico, iconBtn, menu, message, morph, num, toast } from "./ui";
 
 const KEY = "kursbuch-search";
 const OPEN = String.fromCharCode(1);
@@ -22,8 +22,12 @@ export type SearchOpts = {
   /** Kurse des gewaehlten Semesters und sein kurzer Name */
   semesterIds: () => number[];
   semesterLabel: () => string;
-  /** Kurs in der Mitte oeffnen und eine Aktivitaet oder einen Abschnitt zeigen */
+  /** Kurs in seinem Fenster oeffnen und eine Aktivitaet oder einen Abschnitt zeigen */
   reveal: (course: number, target?: { cmid?: number; section?: string }) => Promise<unknown>;
+  /** die Lupe, aus der sich das Fenster oeffnet (und in die es sich schliesst) */
+  anchor: () => HTMLElement | null;
+  /** Fenster geoeffnet/geschlossen (der Nebel ruht dann) */
+  onToggle?: (open: boolean) => void;
 };
 
 /** Zeichen ohne Akzent, klein, ß als ss (wie der Index) */
@@ -105,6 +109,9 @@ export class Search {
   private rows: HTMLElement[] = [];
   private sel = -1;
   private back: HTMLElement | null = null;
+  private panel = el("div", "sx-panel n-glass n-liquid panel");
+  private shade = el("div", "sx-back");
+  private closing = false;
 
   constructor(private o: SearchOpts) {
     try {
@@ -119,17 +126,18 @@ export class Search {
     this.input.autocomplete = "off";
     this.input.spellcheck = false;
     const bar = el("div", "sx-bar");
-    bar.append(ico("search"), this.input, this.modeSeg, this.scopeSeg, iconBtn("close", "Schließen (Esc)", "n-ico sm", () => this.close()));
+    const field = el("label", "sx-field");
+    field.append(ico("search"), this.input);
+    bar.append(field, this.modeSeg, this.scopeSeg, iconBtn("close", "Schließen (Esc)", "n-ico sm", () => this.close()));
     const foot = el("div", "sx-foot");
     const ai = iconBtn("spark", "Für KI kopieren", "n-ico sm", () => this.aiMenu(ai));
     foot.append(this.status, ai);
-    const panel = el("div", "sx-panel n-glass big");
+    const panel = this.panel;
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Suche");
     panel.append(bar, this.list, foot);
-    const back = el("div", "sx-back");
-    back.addEventListener("pointerdown", () => this.close());
-    this.el.append(back, panel);
+    this.shade.addEventListener("pointerdown", () => this.close());
+    this.el.append(this.shade, panel);
     this.drawSegs();
     this.input.addEventListener("input", () => this.schedule());
     this.input.addEventListener("keydown", (e) => this.key(e));
@@ -139,10 +147,19 @@ export class Search {
 
   get isOpen() { return !this.el.hidden; }
 
+  private get kids() { return [...this.panel.children] as HTMLElement[]; }
+
   open(term?: string) {
+    const fresh = !this.isOpen || this.closing;
     if (!this.isOpen) this.back = document.activeElement as HTMLElement | null;
+    this.closing = false;
     this.el.hidden = false;
     this.drawSegs();
+    if (fresh) {
+      this.o.onToggle?.(true);
+      this.shade.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: "ease-out" });
+      void morph(this.panel, this.o.anchor()?.getBoundingClientRect() ?? null, this.kids, true);
+    }
     if (term != null) {
       this.input.value = term;
       this.deep = false; // von aussen (Deep Link, Notch): schnell, sofort
@@ -154,12 +171,19 @@ export class Search {
   }
 
   close() {
-    if (!this.isOpen) return;
+    if (!this.isOpen || this.closing) return;
+    this.closing = true;
     clearTimeout(this.timer);
     this.seq++;
-    this.el.hidden = true;
-    this.back?.focus?.();
-    this.back = null;
+    this.shade.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: "ease-in", fill: "forwards" });
+    void morph(this.panel, this.o.anchor()?.getBoundingClientRect() ?? null, this.kids, false).then(() => {
+      if (!this.closing) return; // zwischendurch wieder geoeffnet
+      this.closing = false;
+      this.el.hidden = true;
+      this.o.onToggle?.(false);
+      this.back?.focus?.();
+      this.back = null;
+    });
   }
 
   // ----------------------------------------------------------------- Bedienung

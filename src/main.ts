@@ -1,24 +1,26 @@
 /**
- * Kursbuch — LearnWeb im Nojo-Oekosystem, ein Dashboard ueber die ganze Fensterbreite:
- * Zeitstrahl oben (Fischauge, scrollbar), links Kalender, in der Mitte die Kurse des gewaehlten Semesters (Chips zum
- * schnellen Wechsel, geoeffnete Kurse als fortlaufende Seiten nebeneinander), rechts Fristen und Neues. Die Notch
- * bekommt ihre Zone im Kopf frei (notch-align.ts). Daten sind lokal (Python-Seite); Deep Link kursbuch://heute | kurs/<id>.
+ * Kursbuch — LearnWeb im Nojo-Oekosystem. Hauptfenster: oben die Leiste (Konto, Semester, Notch-Zone, Lupe, Fensterknoepfe),
+ * darunter eine grosse matte Flaeche mit runden oberen Ecken: Zeitstrahl, links die Kurse, in der Mitte der Stundenplan, rechts
+ * Kalender und Abgaben. Kurse oeffnen in eigenen Fenstern (`?kurs=<id>`, coursewin.ts). Daten sind lokal (Python-Seite);
+ * Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff>.
  */
 
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { glassLight, liquid, segments, windowControls } from "./nojo/nojo-ui";
 import { api, type Ev, type Link, type NewItem, type Overview } from "./api";
-import { Agenda } from "./agenda";
+import { Abgaben } from "./abgaben";
+import { Account } from "./account";
 import { Calendar } from "./calendar";
 import { Courses } from "./courses";
-import { dayOfTs, todayDay } from "./dates";
+import { mountCourseWindow } from "./coursewin";
+import { todayDay } from "./dates";
 import { Fog } from "./fog";
 import { applyNotch, watchNotch } from "./notch-align";
 import { isSearchKey, Search } from "./search";
-import { Side } from "./side";
 import { Timeline } from "./timeline";
-import { el, fillIcons, hueHex, ico, q, shortSem, toast } from "./ui";
+import { Timetable } from "./timetable";
+import { act, el, fillIcons, hueHex, ico, menu, q, shortSem } from "./ui";
 
 let events: Ev[] = [];
 let news: NewItem[] = [];
@@ -26,56 +28,58 @@ let signature = "";
 let fog: Fog;
 let tl: Timeline;
 let cal: Calendar;
-let agenda: Agenda;
-let side: Side;
+let abgaben: Abgaben;
 let courses: Courses;
+let tt: Timetable;
+let account: Account;
 let search: Search;
 
-const pad = (n: number) => String(n).padStart(2, "0");
-
-/** „heute 13:40“, „gestern 07:15“, „12.10. 07:15“ */
-function when(unix: number) {
-  const d = new Date(unix * 1000);
-  const days = todayDay() - dayOfTs(unix);
-  const t = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  return days === 0 ? `heute ${t}` : days === 1 ? `gestern ${t}` : `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${t}`;
-}
-
-function renderSync(o: Overview) {
-  const s = q(".sync");
-  const age = o.last_run ? Date.now() / 1000 - o.last_run : Infinity;
-  s.classList.toggle("ok", age < 36 * 3600);
-  s.classList.toggle("wait", age >= 36 * 3600);
-  q(".sync-t").textContent = o.last_run ? when(o.last_run) : "–";
-  s.title = o.last_run ? `Letzter Sync: ${when(o.last_run)}` : "Noch kein Sync";
-}
-
-/** Semester-Segmente im Kopf (kurze Namen, „Weitere“ als Symbol) */
+/** Semester-Segmente im Kopf: die zwei neuesten, die aelteren hinter „…“ (dort steht dann der gewaehlte Name) */
 function renderSems() {
   const nav = q(".sems");
-  const list = courses.semesters();
-  nav.hidden = list.length < 2;
-  nav.replaceChildren(...list.map((s) => {
+  const all = courses.semesters();
+  nav.hidden = all.length < 2;
+  const items = all.slice(0, 2).map((s) => {
     const b = el("button", s === courses.semester ? "active" : "");
     b.setAttribute("aria-pressed", String(s === courses.semester));
     b.title = s;
-    if (s === "Weitere") b.append(ico("more")); else b.textContent = shortSem(s);
-    b.addEventListener("click", () => courses.setSemester(s));
+    b.textContent = shortSem(s);
+    b.addEventListener("click", () => pickSemester(s));
     return b;
-  }));
+  });
+  const rest = all.slice(2);
+  if (rest.length) {
+    const on = rest.includes(courses.semester);
+    const more = el("button", on ? "active" : "");
+    more.setAttribute("aria-pressed", String(on));
+    more.title = "Frühere Semester";
+    if (on) more.textContent = shortSem(courses.semester); else more.append(ico("more"));
+    more.addEventListener("click", () => menu(more, rest.map((s) => ({ icon: s === courses.semester ? "check" as const : "kalender" as const, label: s, run: () => pickSemester(s) }))));
+    items.push(more);
+  }
+  nav.replaceChildren(...items);
 }
 
-/** Nebel in den Farben der geoeffneten Kurse (sonst des Semesters) */
+function pickSemester(s: string) {
+  courses.setSemester(s);
+  semesterChanged();
+}
+
+function semesterChanged() {
+  renderSems();
+  tint();
+  tt.setSemester(courses.semester);
+}
+
+/** Nebel in den Farben des Semesters */
 function tint() {
-  const { base, open } = courses.hues();
-  fog.setColors(base.map((h) => hueHex(h)), open.map((h) => hueHex(h)));
+  fog.setColors(courses.hues().map((h) => hueHex(h)));
 }
 
 function renderAll() {
   tl.setEvents(events);
   cal.setEvents(events);
-  agenda.render(events);
-  side.render(events, news);
+  abgaben.render(events);
   tl.refresh();
 }
 
@@ -88,15 +92,18 @@ async function refresh() {
   signature = sig;
   events = ev;
   news = nw;
-  renderSync(o);
+  account.setSync(o.last_run);
   courses.setOverview(o);
+  courses.setNews(news);
   renderSems();
   renderAll();
   tint();
+  tt.setSemester(courses.semester);
+  tt.refresh();
 }
 
 async function go(l: Link) {
-  if (l.view === "kurs") { if (!(await courses.open(l.arg))) toast("Kurs nicht gefunden"); }
+  if (l.view === "kurs") act(api.openCourse(l.arg));
   else if (l.view === "suche") search.open(l.arg);
   else if (l.view === "heute") {
     tl.today();
@@ -126,28 +133,39 @@ async function main() {
 
   const hueOf = (id: number | null) => courses.hueOf(id);
   const nameOf = (id: number | null) => courses.nameOf(id);
-  const open = (id: number) => void courses.open(id);
-  courses = new Courses({
-    nextOf: (id) => events.filter((e) => e.course === id && e.ts >= Date.now() / 1000 - 3600).sort((a, b) => a.ts - b.ts)[0],
-    onChange: () => { renderSems(); tint(); },
-    onData: () => void refresh(),
+  const open = (id: number) => act(api.openCourse(id));
+  const nextOf = (id: number) => events.filter((e) => e.course === id && e.ts >= Date.now() / 1000 - 3600).sort((a, b) => a.ts - b.ts)[0];
+
+  account = new Account(() => { signature = ""; void refresh(); });
+  q("#acct-host").replaceWith(account.el);
+  courses = new Courses({ onOpen: open, onRead: () => void refresh() });
+  tl = new Timeline({ hueOf, nameOf, onOpen: open });
+  cal = new Calendar({ hueOf, onPick: (day) => tl.focusDay(day) });
+  abgaben = new Abgaben({ hueOf, nameOf, onOpen: open });
+  tt = new Timetable({
+    semester: () => courses.semester,
+    courses: () => courses.inSemester(),
+    card: (id) => courses.card(id),
+    nextOf,
+    newOf: courses.newOf,
+    openCourse: open,
+    openWeb: (id) => act(api.openWeb(id)),
   });
   search = new Search({
     hueOf, nameOf,
     semesterIds: () => courses.semesterIds(),
     semesterLabel: () => (courses.semester ? shortSem(courses.semester) : ""),
-    reveal: (id, target) => courses.reveal(id, target),
+    reveal: (id, target) => api.openCourse(id, target?.cmid, target?.section),
+    anchor: () => q(".find"),
+    onToggle: (on) => fog.hold(on),
   });
   document.body.append(search.el);
   q(".find").addEventListener("click", () => search.open());
-  tl = new Timeline({ hueOf, nameOf, onOpen: open });
-  cal = new Calendar({ hueOf, nameOf, onOpen: open, onPick: (day) => tl.focusDay(day) });
-  agenda = new Agenda({ hueOf, nameOf, onOpen: open });
-  side = new Side({ hueOf, nameOf, onOpen: open, onRead: () => void refresh() });
+
   q("#tl-host").append(tl.el);
-  q("#slot-l").append(cal.el, agenda.el);
-  q("#slot-c").append(courses.el);
-  q("#slot-r").append(side.el);
+  q("#slot-l").append(courses.el);
+  q("#slot-c").append(tt.el);
+  q("#slot-r").append(cal.el, abgaben.el);
 
   glassLight();
   liquid();
@@ -155,20 +173,19 @@ async function main() {
   void syncWindow();
   void win.onResized(() => void syncWindow()).catch(() => {});
 
-  // Seitenleisten als Schubladen in kleinen Fenstern
+  // Kalender und Abgaben als Schublade in schmalen Fenstern
   const scrim = q(".scrim");
-  const closeDrawers = () => { document.body.classList.remove("dl", "dr"); scrim.hidden = true; };
+  const closeDrawer = () => { document.body.classList.remove("dr"); scrim.hidden = true; };
   document.querySelectorAll<HTMLButtonElement>(".drawer").forEach((b) => b.addEventListener("click", () => {
-    const cls = b.dataset.drawer!;
-    const on = !document.body.classList.contains(cls);
-    closeDrawers();
-    document.body.classList.toggle(cls, on);
+    const on = !document.body.classList.contains("dr");
+    closeDrawer();
+    document.body.classList.toggle("dr", on);
     scrim.hidden = !on;
   }));
-  scrim.addEventListener("click", closeDrawers);
+  scrim.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => {
     if (isSearchKey(e)) { e.preventDefault(); search.open(); return; }
-    if (e.key === "Escape") { if (document.body.classList.contains("dl") || document.body.classList.contains("dr")) closeDrawers(); else if (document.body.classList.contains("full")) void setFull(false); }
+    if (e.key === "Escape") { if (document.body.classList.contains("dr")) closeDrawer(); else if (document.body.classList.contains("full")) void setFull(false); }
     if (e.key === "F11") { e.preventDefault(); void setFull(!document.body.classList.contains("full")); }
   });
 
@@ -181,7 +198,16 @@ async function main() {
   if (pending) await go(pending);
   window.addEventListener("focus", () => void refresh());
   // Restzeiten und „heute“ nachziehen
-  window.setInterval(() => { side.render(events, news); agenda.render(events); tl.refresh(); }, 60_000);
+  window.setInterval(() => { abgaben.render(events); tl.refresh(); }, 60_000);
 }
 
-void main();
+const params = new URLSearchParams(location.search);
+const course = Number(params.get("kurs"));
+if (params.has("kurs") && Number.isInteger(course) && course > 0) {
+  document.getElementById("dash")?.remove();
+  const cmid = Number(params.get("cmid"));
+  void mountCourseWindow(course, { cmid: Number.isInteger(cmid) && cmid > 0 ? cmid : null, section: params.get("sec") });
+} else {
+  void main();
+}
+

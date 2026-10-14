@@ -38,3 +38,11 @@ export function urgency(ts: number, allDay: boolean, now = Date.now() / 1000) {
   if (!allDay && ts < now) return 2;
   return dayOfTs(ts) - todayDay() <= 1 ? 1 : 0;
 }
+
+/** „heute 13:40“, „gestern 07:15“, „12.10. 07:15“ (Unix-Sekunden) */
+export function ago(unix: number) {
+  const d = new Date(unix * 1000);
+  const days = todayDay() - dayOfTs(unix);
+  const t = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return days === 0 ? `heute ${t}` : days === 1 ? `gestern ${t}` : `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${t}`;
+}

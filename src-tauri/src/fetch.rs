@@ -1,13 +1,10 @@
-//! Sofort-Download einer Aktivitaet: startet die Python-Seite (`learnweb.cli fetch`), die als Einzige mit LearnWeb spricht
-//! (Zugangsdaten, Sperre gegen gleichzeitige Syncs, State, Index und Verzeichnis nachziehen). Die App bekommt nur das Ergebnis.
+//! Sofort-Download einer Aktivitaet ueber die Python-Seite (`learnweb.cli fetch`, siehe py.rs): Zugangsdaten, Sperre gegen
+//! gleichzeitige Syncs, State, Index und Verzeichnis nachziehen. Die App bekommt nur das Ergebnis.
 
 use crate::data::Paths;
+use crate::py;
 use serde::{Deserialize, Serialize};
-use std::os::windows::process::CommandExt;
-use std::process::{Command, Stdio};
 use tauri::State;
-
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Deserialize)]
 struct Out {
@@ -39,13 +36,9 @@ fn err(code: &str, message: impl Into<String>) -> FetchError {
     FetchError { code: code.into(), message: message.into() }
 }
 
-/// Letzte JSON-Zeile der Ausgabe auswerten (davor koennen Warnungen stehen)
+/// Antwort der Python-Seite auswerten
 fn parse(stdout: &str) -> Result<Fetched, FetchError> {
-    let o: Out = stdout
-        .lines()
-        .rev()
-        .find_map(|l| serde_json::from_str(l.trim()).ok())
-        .ok_or_else(|| err("start", "Keine Antwort von der Python-Seite."))?;
+    let o: Out = py::last_json(stdout).ok_or_else(|| err("start", "Keine Antwort von der Python-Seite."))?;
     if o.ok {
         Ok(Fetched { files: o.files.len(), skipped: o.skipped.len() })
     } else {
@@ -54,18 +47,12 @@ fn parse(stdout: &str) -> Result<Fetched, FetchError> {
 }
 
 fn run(paths: &Paths, course: i64, cmid: i64, all_sizes: bool) -> Result<Fetched, FetchError> {
-    let mut cmd = Command::new(&paths.uv);
-    cmd.args(["run", "python", "-m", "learnweb.cli", "fetch", &course.to_string(), &cmid.to_string()]);
+    let (c, m) = (course.to_string(), cmid.to_string());
+    let mut args = vec!["fetch", c.as_str(), m.as_str()];
     if all_sizes {
-        cmd.arg("--all-sizes");
+        args.push("--all-sizes");
     }
-    let out = cmd
-        .current_dir(&paths.project)
-        .stdin(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| err("start", format!("Die Python-Seite (uv) lässt sich nicht starten: {e}")))?;
-    parse(&String::from_utf8_lossy(&out.stdout))
+    parse(&py::cli(paths, &args, None).map_err(|e| err("start", e))?)
 }
 
 /// `all_sizes`: auch Dateien laden, die der Sync als zu gross uebersprungen hat (ausdruecklicher Wunsch des Nutzers)

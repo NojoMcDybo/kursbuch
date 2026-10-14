@@ -9,11 +9,15 @@
 //! - open.rs:   Dateien (PDF -> Folio), Links, Obsidian-Notiz und Ordner oeffnen; nur IDs von der Oberflaeche
 //! - search.rs: Volltextsuche im Index (data/index.db, nur lesend) und Kurstext fuer die KI
 //! - share.rs:  „Fuer KI kopieren“ (Verzeichnis, Kurstext) und Datei in die Zwischenablage
-//! - fetch.rs:  Sofort-Download einer Aktivitaet ueber die Python-Seite
+//! - fetch.rs:  Sofort-Download einer Aktivitaet ueber die Python-Seite (py.rs ruft sie auf)
+//! - timetable.rs: Stundenplan (eigene Eintraege je Semester, Import/Export als .ics)
+//! - account.rs: LearnWeb-Anmeldung ueber die Python-Seite (Zugangsdaten im Windows-Tresor, nie in der App)
+//! - windows.rs: Kurse in eigenen Fenstern (`kurs-<id>`)
 //! - links.rs:  Deep Link kursbuch://heute | kurs/<id> | suche/<Begriff> (nur navigieren)
 //!
 //! Die App kennt keine Passwoerter und spricht nie mit LearnWeb: Nur die Python-Seite (learnweb-mcp) tut das.
 
+mod account;
 mod colors;
 mod data;
 mod events;
@@ -22,9 +26,12 @@ mod links;
 mod model;
 mod notch;
 mod open;
+mod py;
 mod search;
 mod share;
+mod timetable;
 mod visits;
+mod windows;
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -115,6 +122,14 @@ pub fn run() {
             open::open_note,
             open::open_folder,
             open::open_directory,
+            windows::open_course,
+            timetable::timetable_get,
+            timetable::timetable_save,
+            timetable::timetable_import,
+            timetable::timetable_export,
+            account::account_status,
+            account::account_login,
+            account::account_logout,
         ])
         .setup(|app| {
             let h = app.handle().clone();

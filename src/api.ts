@@ -56,6 +56,13 @@ export type Fetched = { files: number; skipped: number };
 /** code: too_large | locked | login | learnweb | network | credentials | start */
 export type FetchError = { code: string; message: string };
 
+/** Eintrag im Stundenplan: woechentlicher Termin; day Montag = 0, start/end in Minuten seit Mitternacht */
+export type Entry = { id: string; title: string; day: number; start: number; end: number; room: string; course: number | null };
+export type Plans = Record<string, Entry[]>;
+export type Imported = { entries: Entry[]; skipped: number };
+/** LearnWeb-Anmeldung: gespeichert (Kennung) und ob gerade ein Sync laeuft */
+export type Account = { saved: boolean; user: string | null; running: boolean };
+
 export const api = {
   overview: () => invoke<Overview>("overview"),
   course: (id: number) => invoke<CourseView>("course", { id }),
@@ -78,5 +85,15 @@ export const api = {
   copyFile: (course: number, cmid: number, idx: number) => invoke<void>("copy_file", { course, cmid, idx }),
   /** Sofort laden; allSizes = auch Dateien, die zu gross zum Spiegeln waren. Fehler: FetchError */
   fetch: (course: number, cmid: number, allSizes: boolean) => invoke<Fetched>("fetch", { course, cmid, allSizes }),
+  /** Kurs in eigenem Fenster oeffnen; optional eine Aktivitaet oder einen Abschnitt zeigen */
+  openCourse: (course: number, cmid?: number, section?: string) => invoke<void>("open_course", { course, cmid: cmid ?? null, section: section ?? null }),
+  timetableGet: () => invoke<Plans>("timetable_get"),
+  timetableSave: (semester: string, entries: Entry[]) => invoke<void>("timetable_save", { semester, entries }),
+  timetableImport: (text: string) => invoke<Imported>("timetable_import", { text }),
+  /** schreibt .ics in „Downloads“ und zeigt sie im Explorer; Rueckgabe: Pfad. from/to als JJJJ-MM-TT */
+  timetableExport: (semester: string, from: string, to: string) => invoke<string>("timetable_export", { semester, from, to }),
+  accountStatus: () => invoke<Account>("account_status"),
+  accountLogin: (user: string, password: string) => invoke<void>("account_login", { user, password }),
+  accountLogout: () => invoke<void>("account_logout"),
   takePending: () => invoke<Link | null>("take_pending"),
 };

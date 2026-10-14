@@ -1,16 +1,15 @@
-/** Kalender (linke Seite): Monatsraster mit farbigen Punkten je Kurs; ein Tag antippen holt ihn in den Zeitstrahl und listet seine Termine. */
+/** Kalender (rechts oben, ohne eigene Karte): Monatsraster mit farbigen Punkten je Kurs; ein Tag antippen holt ihn in den Zeitstrahl. */
 
 import type { Ev } from "./api";
 import { MONTHS, dateOf, dayOf, dayOfTs, todayDay, weekdayIndex } from "./dates";
-import { KIND_ICON } from "./timeline";
-import { el, hsl, ico, iconBtn } from "./ui";
+import { el, hsl, iconBtn } from "./ui";
 
-export type CalendarOpts = { hueOf: (course: number | null) => number | null; nameOf: (course: number | null) => string; onPick: (day: number) => void; onOpen: (course: number) => void };
+export type CalendarOpts = { hueOf: (course: number | null) => number | null; onPick: (day: number) => void };
 
 const WD = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 export class Calendar {
-  readonly el = el("section", "cal n-glass big");
+  readonly el = el("section", "cal");
   private shown = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   private picked = todayDay();
   private events: Ev[] = [];
@@ -51,7 +50,7 @@ export class Calendar {
     const title = el("button", "cal-m", `${MONTHS[this.shown.getMonth()]} ${this.shown.getFullYear()}`);
     title.title = "Heute";
     title.addEventListener("click", () => this.pick(today, true));
-    head.append(iconBtn("prev", "Vorheriger Monat", "n-ico sm", () => this.go(-1)), title, iconBtn("next", "Nächster Monat", "n-ico sm", () => this.go(1)));
+    head.append(iconBtn("prev", "Vorheriger Monat", "n-ico sm n-glass n-liquid", () => this.go(-1)), title, iconBtn("next", "Nächster Monat", "n-ico sm n-glass n-liquid", () => this.go(1)));
 
     const grid = el("div", "cal-g");
     for (const w of WD) grid.append(el("span", "cal-w", w));
@@ -85,17 +84,6 @@ export class Calendar {
       grid.append(b);
     }
 
-    const list = el("div", "cal-l");
-    for (const e of (by.get(this.picked) ?? []).sort((a, b) => a.ts - b.ts)) {
-      const r = el("button", "cal-e");
-      const h = this.o.hueOf(e.course);
-      r.style.setProperty("--c", h == null ? "rgba(245,245,247,.8)" : hsl(h));
-      const time = e.allDay ? "" : new Date(e.ts * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-      r.append(ico(KIND_ICON[e.kind]), el("span", "cal-t", e.short), el("small", "", time));
-      r.title = `${this.o.nameOf(e.course)}\n${e.title}`;
-      r.addEventListener("click", () => { if (e.course != null) this.o.onOpen(e.course); });
-      list.append(r);
-    }
-    this.el.replaceChildren(head, grid, list);
+    this.el.replaceChildren(head, grid);
   }
 }

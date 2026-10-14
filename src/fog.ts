@@ -30,6 +30,7 @@ export class Fog {
   private sig = "";
   private timer = 0;
   private still = matchMedia("(prefers-reduced-motion: reduce)");
+  private held = false;
 
   constructor() {
     this.el = document.createElement("canvas");
@@ -79,10 +80,16 @@ export class Fog {
     this.run();
   }
 
+  /** Anhalten (z. B. solange ein grosses Glasfenster darueber liegt, dessen Brechung sonst bei jedem Bild neu rechnet) */
+  hold(on: boolean) {
+    this.held = on;
+    this.run();
+  }
+
   /** Zeitgeber statt requestAnimationFrame: ein Animationsaufruf pro Bildschirmbild (hier 140 Hz) haelt die ganze Anzeige wach, auch wenn selten gezeichnet wird */
   private run() {
     clearInterval(this.timer);
-    if (document.hidden || !document.hasFocus() || this.still.matches) return;
+    if (document.hidden || !document.hasFocus() || this.still.matches || this.held) return;
     this.timer = window.setInterval(() => this.draw(performance.now()), 1000 / FPS);
   }
 

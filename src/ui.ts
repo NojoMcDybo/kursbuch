@@ -2,6 +2,13 @@
 
 import { iconNode, type IconName } from "./nojo/nojo-ui";
 
+const TYPE_ICON: Record<string, IconName> = {
+  resource: "document", folder: "folder", url: "link", forum: "forum", assign: "abgabe", opencast: "video", zoom: "video",
+  scheduler: "kalender", h5pactivity: "pointer", data: "layout", ratingallocate: "check", feedback: "check",
+};
+/** Symbol zur Art einer Aktivitaet in LearnWeb */
+export const typeIcon = (t: string): IconName => TYPE_ICON[t] ?? "open";
+
 export const q = <T extends Element = HTMLElement>(s: string, root: ParentNode = document) => root.querySelector(s) as T;
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", text?: string) {
@@ -120,3 +127,19 @@ export function hueHex(hue: number, s = 0.74, l = 0.56) {
 
 /** „WiSe 2026/27“ -> „WiSe 26/27“, „SoSe 2026“ -> „SoSe 26“ */
 export const shortSem = (s: string) => s.replace(/(\d{2})(\d{2})/g, "$2");
+
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Eine Flaeche waechst aus dem Rechteck `from` (Knopf, Stundenplan-Eintrag) an ihre Stelle und kehrt beim Schliessen dorthin
+ *  zurueck. `kids` (Inhalt) blenden spaeter ein bzw. frueher aus, damit nichts verzerrt zu lesen ist. */
+export function morph(box: HTMLElement, from: DOMRect | null, kids: HTMLElement[], opening: boolean, ms = opening ? 520 : 300): Promise<void> {
+  if (!from || reduced()) return Promise.resolve();
+  const to = box.getBoundingClientRect();
+  const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+  const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+  const small = `translate(${dx}px, ${dy}px) scale(${Math.max(0.03, from.width / to.width)}, ${Math.max(0.03, from.height / to.height)})`;
+  const easing = opening ? "cubic-bezier(0.22, 1.12, 0.36, 1)" : "cubic-bezier(0.5, 0, 0.75, 0)";
+  const main = box.animate(opening ? [{ transform: small }, { transform: "none" }] : [{ transform: "none" }, { transform: small }], { duration: ms, easing });
+  for (const k of kids) k.animate(opening ? [{ opacity: 0 }, { opacity: 0, offset: 0.4 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: "linear" });
+  return main.finished.then(() => undefined, () => undefined);
+}

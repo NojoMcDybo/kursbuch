@@ -1,28 +1,15 @@
 /**
- * Mitte: oben die Kurse des gewaehlten Semesters als Chips (schneller Wechsel), darunter die geoeffneten Kurse als
- * fortlaufende Seiten nebeneinander (so viele, wie in die Fensterbreite passen, sonst seitlich blaettern).
- * Ist nichts geoeffnet, zeigt die Mitte die Kurse des Semesters als grosse Kacheln.
+ * Kurse: Zustand (Semester, Kursraster mit Farbtoenen) und die Liste links, aus der man einen Kurs in einem eigenen Fenster
+ * oeffnet. Neues (seit dem letzten Oeffnen) steht als Zahl hinter dem Kurs; das Haekchen setzt es zurueck.
  */
 
-import { api, type CourseCard, type CourseView, type Ev, type FetchError, type ItemView, type Overview } from "./api";
-import { left, urgency } from "./dates";
-import { lightScroller, type IconName } from "./nojo/nojo-ui";
-import { typeIcon } from "./side";
-import { KIND_ICON } from "./timeline";
-import { act, announce, copyText, el, hsl, ico, iconBtn, menu, message, num, toast } from "./ui";
-
-const MIN_PANE = 500;
-const GAP = 14;
-const KEY_OPEN = "kursbuch-open";
-type Scroller = ReturnType<typeof lightScroller>;
+import { api, type CourseCard, type NewItem, type Overview } from "./api";
+import { act, el, ico, iconBtn } from "./ui";
 
 export type CoursesOpts = {
-  /** naechster Termin des Kurses (fuer die Kachel) */
-  nextOf: (course: number) => Ev | undefined;
-  /** Semester oder geoeffnete Kurse haben sich geaendert (Nebel, Zeitstrahl, Kalender nachziehen) */
-  onChange: () => void;
-  /** Daten haben sich geaendert (Sofort-Download): Stand neu holen */
-  onData: () => void;
+  onOpen: (course: number) => void;
+  /** „Neu“ wurde zurueckgesetzt: Stand neu holen */
+  onRead: () => void;
 };
 
 /** Das Semester, in dem heute liegt (Oktober-Maerz = WiSe, April-September = SoSe) */
@@ -34,44 +21,27 @@ export function semesterNow(d = new Date()): string {
 }
 
 export class Courses {
-  readonly el = el("main", "center");
-  private strip = el("div", "strip");
-  private stage = el("div", "stage");
-  private panes: HTMLElement | null = null;
+  readonly el = el("nav", "cl");
   private ov: Overview | null = null;
   private sem = "";
-  private opened: number[] = [];
-  private views = new Map<number, CourseView>();
-  private sigs = new Map<number, string>();
-  private scrollers = new Map<number, Scroller>();
-  /** laufende Sofort-Downloads ("kurs:cmid") */
-  private busy = new Set<string>();
+  private news = new Map<number, number>();
 
   constructor(private o: CoursesOpts) {
-    this.el.append(this.strip, this.stage);
-    try {
-      const saved = JSON.parse(localStorage.getItem(KEY_OPEN) ?? "[]");
-      if (Array.isArray(saved)) this.opened = saved.filter((n) => Number.isInteger(n));
-    } catch { /* egal */ }
-    new ResizeObserver(() => this.fit()).observe(this.stage);
+    this.el.setAttribute("aria-label", "Kurse");
   }
-
-  // ----------------------------------------------------------------- Zustand
 
   get cards(): CourseCard[] { return this.ov?.courses ?? []; }
   card(id: number | null) { return id == null ? undefined : this.cards.find((c) => c.id === id); }
   hueOf = (id: number | null) => this.card(id)?.hue ?? null;
   nameOf = (id: number | null) => this.card(id)?.title ?? "";
   get semester() { return this.sem; }
+  /** neueste zuerst; „Weitere“ (Kurse ohne Semester) zuletzt */
   semesters(): string[] { return [...new Set(this.cards.map((c) => c.semester ?? "Weitere"))]; }
-  /** Farbtoene fuer den Nebel: die des Semesters, dazu die der geoeffneten Kurse (betont) */
-  hues(): { base: number[]; open: number[] } {
-    const open = this.opened.map((id) => this.card(id)?.hue).filter((h): h is number => h != null);
-    return { base: this.inSemester().map((c) => c.hue), open };
-  }
-  openIds() { return [...this.opened]; }
-  private inSemester() { return this.cards.filter((c) => (c.semester ?? "Weitere") === this.sem); }
+  inSemester() { return this.cards.filter((c) => (c.semester ?? "Weitere") === this.sem); }
   semesterIds() { return this.inSemester().map((c) => c.id); }
+  newOf = (id: number) => this.news.get(id) ?? 0;
+  /** Farbtoene des Semesters (Nebel) */
+  hues() { return this.inSemester().map((c) => c.hue); }
 
   setOverview(ov: Overview) {
     this.ov = ov;
@@ -80,9 +50,13 @@ export class Courses {
       const want = (() => { try { return localStorage.getItem("kursbuch-sem") ?? ""; } catch { return ""; } })();
       this.sem = sems.includes(want) ? want : sems.includes(semesterNow()) ? semesterNow() : sems[0] ?? "";
     }
-    this.opened = this.opened.filter((id) => this.card(id));
     this.draw();
-    void this.reload();
+  }
+
+  setNews(list: NewItem[]) {
+    this.news = new Map();
+    for (const n of list) this.news.set(n.course, (this.news.get(n.course) ?? 0) + 1);
+    this.draw();
   }
 
   setSemester(s: string) {
@@ -90,322 +64,24 @@ export class Courses {
     this.sem = s;
     try { localStorage.setItem("kursbuch-sem", s); } catch { /* egal */ }
     this.draw();
-    this.o.onChange();
   }
-
-  // ----------------------------------------------------------------- oeffnen und schliessen
-
-  /** Kurs oeffnen (und sein Semester waehlen); false, wenn es ihn nicht gibt */
-  async open(id: number): Promise<boolean> {
-    const c = this.card(id);
-    if (!c) return false;
-    if ((c.semester ?? "Weitere") !== this.sem) this.setSemester(c.semester ?? "Weitere");
-    if (!this.opened.includes(id)) { this.opened.push(id); this.save(); }
-    await this.load(id);
-    this.draw();
-    this.o.onChange();
-    this.panes?.querySelector<HTMLElement>(`.pane[data-id="${id}"]`)?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
-    announce(c.title);
-    return true;
-  }
-
-  /** Kurs oeffnen und eine Aktivitaet oder einen Abschnitt darin zeigen (blinkt kurz auf) */
-  async reveal(id: number, target?: { cmid?: number; section?: string }) {
-    if (!(await this.open(id))) return false;
-    const pane = this.panes?.querySelector<HTMLElement>(`.pane[data-id="${id}"]`);
-    const hit = !target
-      ? null
-      : target.cmid != null
-        ? pane?.querySelector<HTMLElement>(`[data-cmid="${target.cmid}"]`)
-        : [...(pane?.querySelectorAll<HTMLElement>(".sec") ?? [])].find((s) => s.dataset.title === target.section);
-    const body = pane?.querySelector<HTMLElement>(".p-body");
-    if (!hit || !body) return true;
-    // nur senkrecht im Seitenkoerper blaettern (scrollIntoView wuerde auch die Reihe der Seiten verschieben)
-    const top = hit.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - (body.clientHeight - hit.offsetHeight) / 2;
-    body.scrollTo({ top: Math.max(0, top), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-    hit.classList.remove("flash");
-    void hit.offsetWidth;
-    hit.classList.add("flash");
-    return true;
-  }
-
-  close(id: number) {
-    this.opened = this.opened.filter((x) => x !== id);
-    this.save();
-    const p = this.panes?.querySelector<HTMLElement>(`.pane[data-id="${id}"]`);
-    const done = () => { this.dispose(id); this.draw(); this.o.onChange(); };
-    if (p && !matchMedia("(prefers-reduced-motion: reduce)").matches) { p.classList.add("closing"); window.setTimeout(done, 220); } else done();
-  }
-
-  closeAll() { for (const id of [...this.opened]) { this.opened = this.opened.filter((x) => x !== id); this.dispose(id); } this.save(); this.draw(); this.o.onChange(); }
-
-  private save() { try { localStorage.setItem(KEY_OPEN, JSON.stringify(this.opened)); } catch { /* egal */ } }
-
-  private dispose(id: number) {
-    this.scrollers.get(id)?.dispose();
-    this.scrollers.delete(id);
-    this.views.delete(id);
-    this.sigs.delete(id);
-  }
-
-  private async load(id: number) {
-    try {
-      this.views.set(id, await api.course(id));
-    } catch {
-      this.opened = this.opened.filter((x) => x !== id);
-      this.save();
-    }
-  }
-
-  /** Alle geoeffneten Kurse frisch laden; nur Seiten mit anderem Inhalt werden neu gezeichnet (Scrollstand bleibt) */
-  private async reload() {
-    await Promise.all(this.opened.map((id) => this.load(id)));
-    this.draw();
-  }
-
-  // ----------------------------------------------------------------- Zeichnen
 
   private draw() {
-    this.drawStrip();
-    if (!this.opened.length) this.drawTiles();
-    else this.drawPanes();
-    this.fit();
-  }
-
-  private drawStrip() {
-    const items: HTMLElement[] = this.inSemester().map((c) => {
-      const b = el("button", "chip n-liquid");
-      b.style.setProperty("--h", String(c.hue));
-      const on = this.opened.includes(c.id);
-      b.classList.toggle("on", on);
-      b.setAttribute("aria-pressed", String(on));
+    const list = [...this.inSemester()].sort((a, b) => a.title.localeCompare(b.title, "de"));
+    const total = list.reduce((n, c) => n + this.newOf(c.id), 0);
+    const head = el("h3", "cl-h");
+    head.append(ico("kursbuch"), el("span", "", "Kurse"), el("small", "", list.length ? String(list.length) : ""));
+    if (total) head.append(iconBtn("check", "Neues als gelesen markieren", "n-ico sm cl-x", () => act(api.markRead().then(this.o.onRead))));
+    const rows = list.map((c) => {
+      const b = el("button", "cl-r");
+      b.style.setProperty("--c", `hsl(${c.hue} 68% 62%)`);
       b.title = [c.title, c.teacher].filter(Boolean).join("\n");
-      b.append(el("i", "chip-dot"), el("span", "chip-t", c.title));
-      b.addEventListener("click", () => {
-        if (on) this.panes?.querySelector<HTMLElement>(`.pane[data-id="${c.id}"]`)?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
-        else void this.open(c.id);
-      });
+      b.append(el("i", "cl-dot"), el("span", "cl-t", c.title));
+      const n = this.newOf(c.id);
+      if (n) { const badge = el("span", "cl-n", String(n)); badge.title = `${n} neu oder aktualisiert`; b.append(badge); }
+      b.addEventListener("click", () => this.o.onOpen(c.id));
       return b;
     });
-    if (this.opened.length) items.push(iconBtn("close", "Alle schließen", "n-ico sm n-glass n-liquid chip-x", () => this.closeAll()));
-    this.strip.replaceChildren(...items);
+    this.el.replaceChildren(head, ...rows);
   }
-
-  private notice(icon: IconName, cls = "empty") {
-    const d = el("div", cls);
-    d.append(ico(icon, 34));
-    return d;
-  }
-
-  private drawTiles() {
-    this.disposeAll();
-    this.panes = null;
-    const o = this.ov;
-    if (!o || o.status !== "ok" || !this.inSemester().length) {
-      this.stage.replaceChildren(this.notice(o?.status === "error" ? "refresh" : "kursbuch"));
-      return;
-    }
-    const grid = el("div", "tiles");
-    this.inSemester().forEach((c, i) => grid.append(this.tile(c, i)));
-    this.stage.replaceChildren(grid);
-  }
-
-  private tile(c: CourseCard, i: number) {
-    const b = el("button", "tile n-liquid panel");
-    b.style.setProperty("--h", String(c.hue));
-    b.style.setProperty("--i", String(i));
-    b.title = [c.title, c.teacher].filter(Boolean).join("\n");
-    b.append(el("i", "tile-glow"), el("h3", "t-title", c.title));
-    if (c.teacher) b.append(el("p", "t-teacher", c.teacher));
-    const foot = el("div", "t-foot");
-    const stat = (name: IconName, n: number, title: string, cls = "") => {
-      const s = el("span", `t-stat ${cls}`.trim());
-      s.title = title;
-      s.append(ico(name), String(n));
-      foot.append(s);
-    };
-    stat("document", c.files, "Dateien");
-    if (c.skipped) stat("download", c.skipped, "zu groß zum Spiegeln", "warn");
-    if (c.errors) stat("refresh", c.errors, "Download fehlgeschlagen", "warn");
-    const next = this.o.nextOf(c.id);
-    if (next) {
-      const n = el("span", `t-next u${urgency(next.ts, next.allDay)}`);
-      n.append(ico(KIND_ICON[next.kind]), left(next.ts, next.allDay));
-      n.title = next.title;
-      foot.append(n);
-    }
-    b.append(foot);
-    b.addEventListener("click", () => void this.open(c.id));
-    return b;
-  }
-
-  private disposeAll() { for (const id of [...this.scrollers.keys()]) { this.scrollers.get(id)?.dispose(); this.scrollers.delete(id); } this.sigs.clear(); }
-
-  private drawPanes() {
-    if (!this.panes || !this.stage.contains(this.panes)) {
-      this.disposeAll();
-      this.panes = el("div", "panes");
-      this.panes.addEventListener("scroll", () => this.scrollers.forEach((s) => s.layout()), { passive: true });
-      this.stage.replaceChildren(this.panes);
-    }
-    const host = this.panes;
-    // Seiten in der Reihenfolge des Oeffnens; vorhandene bleiben stehen (Scrollstand), neue gleiten ein
-    for (const id of this.opened) {
-      const v = this.views.get(id);
-      if (!v) continue;
-      const sig = JSON.stringify(v);
-      let p = host.querySelector<HTMLElement>(`.pane[data-id="${id}"]`);
-      if (!p) {
-        p = this.buildPane(v);
-        host.append(p);
-        const body = p.querySelector<HTMLElement>(".p-body")!;
-        requestAnimationFrame(() => this.scrollers.set(id, lightScroller(body, { insetTop: 64, insetBottom: 12, edge: 6 })));
-      } else if (this.sigs.get(id) !== sig) {
-        const body = p.querySelector<HTMLElement>(".p-body")!;
-        const top = body.scrollTop;
-        this.fillBody(body, v);
-        body.scrollTop = top;
-      }
-      this.sigs.set(id, sig);
-    }
-    for (const p of [...host.querySelectorAll<HTMLElement>(".pane")]) {
-      if (!this.opened.includes(Number(p.dataset.id))) { this.scrollers.get(Number(p.dataset.id))?.dispose(); this.scrollers.delete(Number(p.dataset.id)); p.remove(); }
-    }
-    for (const id of this.opened) { const p = host.querySelector(`.pane[data-id="${id}"]`); if (p) host.append(p); } // Reihenfolge
-  }
-
-  /** So viele Seiten nebeneinander, wie in die Breite passen (mindestens eine, hoechstens so viele wie geoeffnet) */
-  private fit() {
-    if (!this.panes) return;
-    const w = this.stage.clientWidth;
-    const n = Math.max(1, Math.min(this.opened.length, Math.floor((w + GAP) / (MIN_PANE + GAP))));
-    this.panes.style.setProperty("--fit", String(n));
-    this.panes.classList.toggle("scrolls", this.opened.length > n);
-    this.scrollers.forEach((s) => s.layout());
-  }
-
-  // ----------------------------------------------------------------- Kursseite
-
-  private buildPane(v: CourseView) {
-    const p = el("article", "pane n-glass big");
-    p.dataset.id = String(v.id);
-    p.style.setProperty("--h", String(v.hue));
-    p.setAttribute("aria-label", v.title);
-    const head = el("header", "p-head");
-    const t = el("div", "p-titles");
-    t.append(el("h2", "p-title", v.title));
-    if (v.teacher) t.append(el("span", "p-sub", v.teacher));
-    const acts = el("div", "p-acts");
-    const web = iconBtn("external", "LearnWeb", "n-ico sm", () => act(api.openWeb(v.id)));
-    web.disabled = !v.web;
-    const note = iconBtn("open", v.note ? "Notiz in Obsidian" : "Noch keine Notiz", "n-ico sm", () => act(api.openNote(v.id)));
-    note.disabled = !v.note;
-    const ai = iconBtn("spark", "Für KI kopieren", "n-ico sm", () => menu(ai, [
-      { icon: "document", label: "Übersicht", hint: "Dateien, Seiten, Anfänge", run: () => void this.copyOutline(v.id, false) },
-      { icon: "spark", label: "Übersicht + Text", hint: "samt Text aller Dateien", run: () => void this.copyOutline(v.id, true) },
-    ]));
-    acts.append(ai, web, note, iconBtn("folder", "Ordner", "n-ico sm", () => act(api.openFolder(v.id))), iconBtn("close", "Schließen", "n-ico sm", () => this.close(v.id)));
-    head.append(el("i", "p-dot"), t, acts);
-    const body = el("div", "p-body");
-    this.fillBody(body, v);
-    p.append(head, body);
-    return p;
-  }
-
-  private fillBody(body: HTMLElement, v: CourseView) {
-    const secs = v.sections.filter((s) => s.items.length).map((s) => {
-      const sec = el("section", "sec");
-      sec.dataset.title = s.title;
-      sec.append(el("h3", "sec-h", s.title));
-      const ul = el("ul", "rows");
-      for (const it of s.items) ul.append(this.item(v, it));
-      sec.append(ul);
-      return sec;
-    });
-    body.replaceChildren(...secs);
-  }
-
-  /** Datei -> Folio/Standardprogramm, Ordner -> Dateien darunter, Link -> Browser, Label -> Text */
-  private item(v: CourseView, it: ItemView) {
-    const li = el("li", "it");
-    li.dataset.cmid = String(it.cmid);
-    if (it.typ === "label") { li.className = "txt"; li.textContent = it.name; return li; }
-    if (this.busy.has(`${v.id}:${it.cmid}`)) li.classList.add("busy");
-    /** Zeile; `acts` sind Symbolknoepfe am rechten Rand (beim Zeigen; `show` = immer sichtbar) */
-    const row = (name: IconName, label: string, meta: string, run?: () => Promise<unknown>, cls = "", acts: HTMLElement[] = [], show = false) => {
-      const w = el("div", "rw");
-      const r = el(run ? "button" : "div", `row ${cls}`.trim());
-      r.append(ico(name), el("span", "r-name", label), el("span", "r-meta", meta));
-      if (run) r.addEventListener("click", () => act(run()));
-      w.append(r);
-      if (acts.length) {
-        const a = el("div", "r-acts");
-        a.append(...acts);
-        w.append(a);
-        w.classList.add("has-acts");
-        w.classList.toggle("show", show);
-      }
-      return w;
-    };
-    const copy = (idx: number) => iconBtn("copy", "Datei kopieren", "n-ico sm", () => act(api.copyFile(v.id, it.cmid, idx).then(() => toast("Kopiert"))));
-    const load = (all: boolean) => iconBtn("download", all ? "Laden (auch große Dateien)" : "Laden", "n-ico sm", () => void this.download(v, it, all));
-    const external = () => iconBtn("external", "LearnWeb", "n-ico sm", () => act(api.openWeb(v.id, it.cmid)));
-    const fetchable = it.typ === "resource" || it.typ === "folder";
-    const single = it.files.length === 1 && it.typ !== "folder";
-    if (single) li.append(row(typeIcon(it.typ), it.name, it.files[0].ext.toUpperCase(), () => api.openFile(v.id, it.cmid, it.files[0].idx), "", [copy(it.files[0].idx)]));
-    else if (it.files.length) {
-      li.append(row(typeIcon(it.typ), it.name, String(it.files.length), undefined, "head"));
-      for (const f of it.files) li.append(row("document", f.name, f.ext.toUpperCase(), () => api.openFile(v.id, it.cmid, f.idx), "sub", [copy(f.idx)]));
-    } else {
-      // keine Datei auf der Platte: laden (wenn es eine Datei oder ein Ordner ist und nichts als zu gross vermerkt ist)
-      const get = fetchable && !it.skipped_mb.length ? [load(false)] : [];
-      if (it.web) {
-        const w = row(typeIcon(it.typ), it.name, "", () => api.openWeb(v.id, it.cmid), "web", get, true);
-        w.querySelector(".r-meta")!.append(ico("external", 13));
-        li.append(w);
-      } else li.append(row(typeIcon(it.typ), it.name, "", undefined, "plain", get, true));
-    }
-    // zu gross: ein Klick laedt es ausdruecklich trotzdem
-    for (const mb of it.skipped_mb) li.append(row("download", `${num(mb)} MB`, "", () => this.download(v, it, true), "note", it.web ? [external()] : []));
-    if (it.error) {
-      const w = row("refresh", "", "", () => this.download(v, it, false), "note");
-      w.title = "Erneut laden";
-      li.append(w);
-    }
-    return li;
-  }
-
-  /** Sofort laden (ueber die Python-Seite); `all` = auch Dateien, die beim Sync als zu gross uebersprungen wurden */
-  private async download(v: CourseView, it: ItemView, all: boolean) {
-    const key = `${v.id}:${it.cmid}`;
-    if (this.busy.has(key)) return;
-    this.busy.add(key);
-    const mark = (on: boolean) => this.panes?.querySelectorAll<HTMLElement>(`.pane[data-id="${v.id}"] [data-cmid="${it.cmid}"]`).forEach((n) => n.classList.toggle("busy", on));
-    mark(true);
-    try {
-      const r = await api.fetch(v.id, it.cmid, all);
-      toast(`${r.files} ${r.files === 1 ? "Datei" : "Dateien"} geladen${r.skipped ? ` · ${r.skipped} zu groß` : ""}`);
-      this.o.onData();
-    } catch (e) {
-      if ((e as Partial<FetchError> | null)?.code === "too_large") toast(message(e), { label: "Trotzdem laden", run: () => void this.download(v, it, true) });
-      else toast(message(e));
-    } finally {
-      this.busy.delete(key);
-      mark(false);
-    }
-  }
-
-  /** Uebersicht (mit Text) eines Kurses als Markdown in die Zwischenablage, fuer Claude/ChatGPT */
-  private async copyOutline(id: number, withText: boolean) {
-    try {
-      const o = await api.forAi(id, withText);
-      await copyText(o.text);
-      toast(`Kopiert · ${num(o.chars)} Zeichen${o.truncated ? " (gekürzt)" : ""}`);
-    } catch (e) {
-      toast(message(e));
-    }
-  }
-
-  /** Farbe eines Kurses fuer andere Teile der Oberflaeche */
-  color(id: number | null, a = 1) { const h = this.hueOf(id); return h == null ? "rgba(245,245,247,.8)" : hsl(h, a); }
 }
