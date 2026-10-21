@@ -51,6 +51,13 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
   ohne Kurs pulsieren, der Eintrag darunter leuchtet in der Kursfarbe; beim Loslassen fliegt die Karte hinein, der Eintrag atmet auf und
   nimmt die Farbe an („Rückgängig“ in der Meldung stellt nur diesen Eintrag zurück). Daneben federt die Karte zurück, Esc bricht ab, am
   Rand des Plans blättert er. Ein Klick ohne Ziehen öffnet weiter den Kurs. Über das Formular (Kurs-Auswahl) geht es weiterhin mit der Tastatur.
+- **Vorschläge aus den Kurstexten** (Phase 5; `learnweb/suggest.py`, `suggestions.rs`): Aus dem Suchindex (Folien, Dokumente, Ankündigungen, Aufgabentexte)
+  zieht der Sync Termine und Fristen, die dort nur im Text stehen (Klausurtermin auf einer Folie, „Abgabe bis …“, Anmeldephase). Ein Datum zählt nur mit
+  einem Stichwort in der Nähe (Prüfung/Klausur, Abgabe/Frist/bis, Symposium/Workshop/Beginn), das zu **diesem** Datum gehört, ohne Download-Stempel,
+  Literaturangaben oder Abschnittsnummern, im Zeitfenster von gestern bis +300 Tagen und im Semester des Kurses (ohne Jahresangabe zählt das passende Jahr).
+  Sie erscheinen **gestrichelt** im Zeitstrahl und in der Woche (nie in den Abgaben oder der Notch); ein Klick fragt „Als Termin übernehmen“ oder „Verwerfen“
+  (kommt nicht wieder) und nennt Quelle und Sicherheit. Gemessen: Regeln ordnen zu rund 80 % richtig ein; **Laya** (Zero-Shot, englisches Modell) war nicht
+  besser und mit 2–6 s je Textstelle langsam – Messung in `learnweb-mcp/docs/phase5-laya-messung.md`. Laya bleibt ein möglicher Helfer für die Sicherheit.
 - **Automatische Erkennung** (`learnweb/schedule.py`, `schedule.rs`, `syncui.ts`): Nach der Anmeldung läuft der Abgleich von selbst (Fortschritt auf dem
   Anmeldebild, später der Knopf mit den zwei Pfeilen in der Leiste; beim Start gleicht Kursbuch ab, wenn der Stand älter als 20 Stunden ist).
   Kurse: `kurse_ab: "auto"` nimmt das vorige und das laufende Semester. Farben: jeder Kurs bekommt seinen Farbton selbst (`colors.rs`).
@@ -170,5 +177,6 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Umbau 3: Pomodoro-Widget, Beige-Hintergrund, Nunito Sans, Selbst-Update (v0.2.0), Inhalte ohne Datei im Kursfenster.
 - Umbau 4 (v0.3.0): Stundenplan und Wochenkalender in einem, automatische Erkennung von Kursen, Farben, Wochentagen und Zeiten, Abgleich aus der App mit Fortschritt, Widget ausblendbar, ruhigere Abstände und Animationen.
 - v0.3.1: Sicherheitsprüfung (`docs/sicherheitspruefung-0.3.0.md`): Content-Security-Policy, „Passwort speichern“ (Haken im Anmeldeformular), Gerätenamen, `mailto:`.
+- v0.3.3: Spalten als Karten (klare Trennung, gleiche Kopf-, Unter- und Inhaltszeile), Vorschläge aus Kurstexten (Phase 5), Abgaben mit Leerzustand.
 - v0.3.2: Kurse per Ziehen dem Stundenplan zuordnen, Kurs-Layer im gleichen Fenster, Zeitstrahl als Glasfläche, Leistenmodule gleich groß, Spalten beginnen auf einer Höhe.
 - Phase 5: KI (Laya): Termine und Fristen aus Folien als Vorschläge. Phase 6: Sync aus der App, Einstellungen, Installer.

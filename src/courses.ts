@@ -90,7 +90,9 @@ export class Courses {
       return b;
     });
     rows.forEach((r, i) => r.style.setProperty("--i", String(i)));
-    this.el.replaceChildren(head, ...rows);
+    const sub = el("p", "cl-sub");
+    sub.append(ico("grip-h", 14), el("span", "", "Auf den Plan ziehen"));
+    this.el.replaceChildren(head, sub, ...rows);
     if (this.enter && rows.length) {
       this.enter = false;
       this.el.classList.add("enter");

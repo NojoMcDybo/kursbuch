@@ -218,6 +218,16 @@ async function refresh() {
   clay?.refresh(); // ein offener Kurs zeigt auch neue Daten (nach dem Sync)
 }
 
+/** Vorschlag aus den Kurstexten: erst nach Bestaetigung wird er ein Termin (Quelle und Sicherheit stehen im Menue) */
+function suggest(ev: Ev, anchor: HTMLElement) {
+  const decide = (accept: boolean) => act(api.suggestionDecide(ev.id, accept).then(() => { signature = ""; return refresh(); }));
+  menu(anchor, [
+    { icon: "check", label: "Als Termin übernehmen", hint: ev.kind === "pruefung" ? "Prüfung" : ev.kind === "frist" ? "Frist" : "Termin", run: () => decide(true) },
+    { icon: "close", label: "Verwerfen", hint: "kommt nicht wieder", run: () => decide(false) },
+    ...(ev.course != null ? [{ icon: "open" as const, label: "Im Kurs zeigen", hint: ev.detail.split(" · ")[0].slice(0, 28), run: () => { void clay.open(ev.course!, {}); } }] : []),
+  ]);
+}
+
 async function go(l: Link) {
   if (l.view === "kurs") { if (!isLocked()) void clay.open(l.arg); }
   else if (l.view === "suche") search.open(l.arg);
@@ -266,7 +276,7 @@ async function main() {
     // Kurse lassen sich auf Stundenplan-Eintraege ziehen (drag.ts); der Plan entsteht etwas spaeter, daher erst beim Aufruf nachsehen
     drag: { over: (x, y, c) => tt.dropOver(x, y, c), rect: () => tt.dropRect(), assign: (c) => tt.dropAssign(c), clear: () => tt.dropClear(), scroller: () => tt.scroller },
   });
-  tl = new Timeline({ hueOf, nameOf, onOpen: open });
+  tl = new Timeline({ hueOf, nameOf, onOpen: open, onSuggest: suggest });
   abgaben = new Abgaben({ hueOf, nameOf, onOpen: open });
   tt = new Timetable({
     semester: () => courses.semester,
@@ -277,6 +287,7 @@ async function main() {
     openCourse: open,
     openWeb: (id) => act(api.openWeb(id)),
     onPick: (day) => tl.focusDay(day),
+    onSuggest: suggest,
   });
   search = new Search({
     hueOf, nameOf,

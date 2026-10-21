@@ -38,7 +38,8 @@ export type CourseView = {
 
 export type EvKind = "sitzung" | "frist" | "pruefung" | "termin";
 /** Termin; ts = Unix-Sekunden, allDay = ohne Uhrzeit, source = lernweb | abschnitt | label */
-export type Ev = { id: string; ts: number; allDay: boolean; kind: EvKind; title: string; short: string; course: number | null; source: string; overdue: boolean };
+/** suggested: Vorschlag aus den Kurstexten, noch nicht bestaetigt (detail = Quelle und Sicherheit) */
+export type Ev = { id: string; ts: number; allDay: boolean; kind: EvKind; title: string; short: string; course: number | null; source: string; overdue: boolean; suggested: boolean; detail: string };
 
 /** Neu oder aktualisiert seit dem letzten Oeffnen; file = Nummer der einzigen Datei (Klick oeffnet sie) */
 export type NewItem = { course: number; cmid: number; name: string; typ: string; file: number | null; ts: number; updated: boolean };
@@ -137,6 +138,8 @@ export const api = {
   updateInstall: () => invoke<void>("update_install"),
   scheduleGet: () => invoke<Suggestion[]>("schedule_get"),
   scheduleDismiss: (key: string) => invoke<void>("schedule_dismiss", { key }),
+  /** Vorschlag uebernehmen (accept) oder verwerfen */
+  suggestionDecide: (id: string, accept: boolean) => invoke<void>("suggestion_decide", { id, accept }),
   /** false, wenn schon ein Sync laeuft */
   syncStart: () => invoke<boolean>("sync_start"),
   syncRunning: () => invoke<boolean>("sync_running"),

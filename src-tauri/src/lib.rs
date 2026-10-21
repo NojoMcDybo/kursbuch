@@ -36,6 +36,7 @@ mod open;
 mod pomodoro;
 mod py;
 mod schedule;
+mod suggestions;
 mod search;
 mod share;
 mod store;
@@ -157,6 +158,7 @@ pub fn run() {
             sync::sync_start,
             sync::sync_running,
             schedule::schedule_get,
+            suggestions::suggestion_decide,
             schedule::schedule_dismiss,
         ])
         .setup(|app| {

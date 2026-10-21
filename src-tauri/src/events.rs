@@ -66,6 +66,10 @@ pub struct Event {
     /// lernweb | abschnitt | label
     pub source: String,
     pub overdue: bool,
+    /// Vorschlag aus den Kurstexten, noch nicht bestaetigt (suggestions.rs); die Notch und die Abgaben zeigen ihn nicht
+    pub suggested: bool,
+    /// bei Vorschlaegen: Quelle und Sicherheit
+    pub detail: String,
 }
 
 fn read<T: for<'a> Deserialize<'a> + Default>(path: std::path::PathBuf) -> T {
@@ -88,6 +92,8 @@ fn merge(dl: DlFile, ev: EvFile) -> Vec<Event> {
             course: d.kurs_id,
             source: "lernweb".into(),
             overdue: d.ueberfaellig,
+            suggested: false,
+            detail: String::new(),
         });
     }
     for e in ev.items {
@@ -95,14 +101,16 @@ fn merge(dl: DlFile, ev: EvFile) -> Vec<Event> {
             continue;
         }
         let short = if e.short.is_empty() { e.title.clone() } else { e.short };
-        out.push(Event { id: e.id, ts: e.ts, all_day: e.all_day, kind: e.kind, title: e.title, short, course: e.course_id, source: e.source, overdue: false });
+        out.push(Event { id: e.id, ts: e.ts, all_day: e.all_day, kind: e.kind, title: e.title, short, course: e.course_id, source: e.source, overdue: false, suggested: false, detail: String::new() });
     }
     out.sort_by(|a, b| a.ts.cmp(&b.ts).then_with(|| a.id.cmp(&b.id)));
     out
 }
 
 pub fn load(paths: &Paths) -> Vec<Event> {
-    merge(read(paths.project.join("data").join("deadlines.json")), read(paths.project.join("data").join("events.json")))
+    let mut ev = merge(read(paths.project.join("data").join("deadlines.json")), read(paths.project.join("data").join("events.json")));
+    crate::suggestions::apply(paths, &mut ev);
+    ev
 }
 
 #[cfg(test)]

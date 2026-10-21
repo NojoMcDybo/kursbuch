@@ -176,7 +176,7 @@ fn tick(app: &AppHandle) {
         return;
     }
     let now = visits::now();
-    let ev = events::load(&paths);
+    let ev: Vec<Event> = events::load(&paths).into_iter().filter(|e| !e.suggested).collect(); // unbestaetigte Vorschlaege gehoeren nicht in die Notch
     let state = crate::data::state(&paths).ok();
     let body = pick(&ev, now).map(|e| {
         let course = e.course.and_then(|id| {
@@ -229,7 +229,7 @@ mod tests {
 
     fn ev(kind: &str, ts: i64) -> Event {
         let title = "Abgabe Aufgabe 1_Mind Map \"Was habe ich im Sport gelernt?\"".to_string();
-        Event { id: format!("{kind}{ts}"), ts, all_day: false, kind: kind.into(), short: title.clone(), title, course: Some(1), source: "lernweb".into(), overdue: false }
+        Event { id: format!("{kind}{ts}"), ts, all_day: false, kind: kind.into(), short: title.clone(), title, course: Some(1), source: "lernweb".into(), overdue: false, suggested: false, detail: String::new() }
     }
 
     #[test]

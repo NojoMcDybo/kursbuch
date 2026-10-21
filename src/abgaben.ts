@@ -17,7 +17,7 @@ export class Abgaben {
   render(events: Ev[]) {
     const now = Date.now() / 1000;
     const due = events
-      .filter((e) => (e.kind === "frist" || e.kind === "pruefung") && e.ts >= now - 12 * 3600 && e.ts <= now + DAYS * 86400)
+      .filter((e) => !e.suggested && (e.kind === "frist" || e.kind === "pruefung") && e.ts >= now - 12 * 3600 && e.ts <= now + DAYS * 86400)
       .sort((a, b) => a.ts - b.ts);
     const head = el("h3", "ab-h");
     head.append(ico("abgabe"), el("span", "", "Abgaben"), el("small", "", due.length ? String(due.length) : ""));
@@ -31,6 +31,7 @@ export class Abgaben {
       r.addEventListener("click", () => { if (e.course != null) this.o.onOpen(e.course); });
       return r;
     });
-    this.el.replaceChildren(head, ...rows);
+    const sub = el("p", "ab-sub", `Nächste ${DAYS} Tage`);
+    this.el.replaceChildren(head, sub, ...(rows.length ? rows : [el("p", "ab-empty", "Nichts fällig.")]));
   }
 }

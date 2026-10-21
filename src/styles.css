@@ -681,8 +681,6 @@ body.dragging-course .tt-b:hover { translate: none; }
 .tt-head { padding: 0; }
 .tt-evs:not([hidden]) { padding-bottom: 6px; }
 .tt-evc { padding: 0 3px; }
-.ab-h { margin-bottom: calc(var(--head-gap) + var(--days-h)); }
-.cl-h { margin-bottom: calc(var(--head-gap) + var(--days-h) - 4px); } /* 4 px: Abstand zwischen den Zeilen der Liste */
 .tt-head .tt-sug { margin: 0 0 8px; padding-top: 0; }
 
 /* ---------- Kurs im gleichen Fenster: Layer (courselayer.ts), nicht Vollbild ---------- */
@@ -695,3 +693,42 @@ body.dragging-course .tt-b:hover { translate: none; }
 .clay-panel .p-head { min-height: 64px; padding: 18px calc(var(--pad) + 96px) 8px var(--pad); }
 .clay-tools { position: absolute; z-index: 5; top: 16px; right: 16px; display: flex; gap: 8px; }
 @media (max-width: 880px) { .clay { padding: 10px; } .clay-panel .p-head { padding-right: 112px; } }
+
+/* ================= Version 0.3.3: Karten (Inhalte klar getrennt) ================= */
+/* Flaeche dunkler, jede Spalte eine matte Karte mit Linie und Schatten; Kopf, Unterzeile und Inhalt sitzen in allen drei Karten gleich */
+:root { --sheet: #141417; --sheet-solid: #141417; --panel: #1f1f23; --panel-line: rgba(255, 255, 255, 0.065); --gap: clamp(14px, 1.6vw, 24px); --card-r: 24px; --card-pad: 18px; }
+.sheet-in { padding-bottom: var(--gap); }
+.cols { margin-top: var(--gap); }
+.slot { --sheet-solid: var(--panel); padding: var(--card-pad) var(--card-pad) 0; border-radius: var(--card-r); background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--panel-line), inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 10px 26px rgba(0, 0, 0, 0.24); }
+.slot.c::after { display: none; }
+.slot.r { padding: var(--card-pad); }
+.cl { gap: 0; padding: 0 0 var(--card-pad); }
+.cl-r + .cl-r { margin-top: 4px; }
+.tt-scroll { padding-bottom: var(--card-pad); }
+
+/* gleiche Titel: Schrift, Hoehe, Abstand */
+.cl-h, .ab-h { margin: 0; padding: 0 2px; min-height: var(--head); font: 640 14px/1 var(--n-font-display); letter-spacing: -0.1px; text-transform: none; color: var(--n-ink); }
+.cl-h > svg, .ab-h > svg { width: 16px; height: 16px; color: var(--n-dim); }
+.cl-h small, .ab-h small { font: 500 12px var(--n-font); color: var(--n-faint); }
+.tt-title { font: 640 14px/1 var(--n-font-display); }
+/* Unterzeile (Hoehe der Wochentage) mit Linie: sie trennt den Kopf vom Inhalt; Inhalt beginnt in allen Karten 8 px darunter */
+.cl-sub, .ab-sub, .tt-names { height: var(--days-h); border-bottom: 1px solid var(--n-line); }
+.cl-sub, .ab-sub { margin: var(--head-gap) 0 0; padding: 0 2px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--n-faint); }
+.cl-sub svg { width: 14px; height: 14px; flex: none; }
+.cl-sub span, .ab-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-sub + .cl-r, .ab-sub + .ln, .ab-sub + .ab-empty { margin-top: 8px; }
+.ab-empty { padding: 14px 4px; font-size: 12.5px; color: var(--n-faint); }
+.ab { margin: 0; }
+.tt-evc { padding: 8px 3px 0; }
+.tt-body { margin-top: 8px; }
+.tt-head .tt-sug { margin: 8px 0 0; }
+.tt-evs:not([hidden]) { padding-bottom: 4px; }
+.clay-panel { --sheet-solid: #1f1f23; background: #1f1f23; }
+
+/* ---------- Vorschlaege aus den Kurstexten: gestrichelt, bis man sie uebernimmt ---------- */
+.ev.sug, .tt-ev.sug { background: transparent; box-shadow: none; outline: 1.5px dashed color-mix(in srgb, var(--c) 75%, transparent); outline-offset: -1.5px; }
+.ev.sug:hover, .ev.sug:focus-visible, .tt-ev.sug:hover { background: color-mix(in srgb, var(--c) 16%, transparent); box-shadow: 0 0 14px color-mix(in srgb, var(--c) 30%, transparent); }
+.ev.sug.dot { background: transparent; outline-offset: -1px; box-shadow: none; }
+.ev.sug.dot::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: color-mix(in srgb, var(--c) 55%, transparent); }
+.tip-s { margin-top: 4px; font-size: 11px; color: var(--n-faint); }

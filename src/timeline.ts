@@ -38,6 +38,8 @@ export type TimelineOpts = {
   hueOf: (course: number | null) => number | null;
   nameOf: (course: number | null) => string;
   onOpen: (course: number) => void;
+  /** Klick auf einen Vorschlag (noch kein Termin): uebernehmen oder verwerfen */
+  onSuggest: (ev: Ev, anchor: HTMLElement) => void;
 };
 
 type Geom = { pad: number; lensPx: number; leftPx: number; rightPx: number; x0: number };
@@ -85,14 +87,14 @@ export class Timeline {
 
   setEvents(list: Ev[]) {
     this.events = list;
-    const keep = new Set(list.map((e) => e.id));
+    const keep = new Set(list.map(key));
     for (const [id, n] of this.nodes) if (!keep.has(id)) { n.remove(); this.nodes.delete(id); }
-    for (const ev of list) if (!this.nodes.has(ev.id)) this.nodes.set(ev.id, this.node(ev));
+    for (const ev of list) if (!this.nodes.has(key(ev))) this.nodes.set(key(ev), this.node(ev));
     this.paint();
   }
 
   /** Neu zeichnen, wenn sich Kursfarben aendern */
-  refresh() { for (const ev of this.events) { const n = this.nodes.get(ev.id); if (n) this.tint(n, ev); } this.paint(); }
+  refresh() { for (const ev of this.events) { const n = this.nodes.get(key(ev)); if (n) this.tint(n, ev); } this.paint(); }
 
   /** einen Tag (Tageszahl) in die Mitte des Fokus holen */
   focusDay(day: number) { this.goTo(day - todayDay() - LENS / 2 + 0.5); }
@@ -272,11 +274,11 @@ export class Timeline {
   // ----------------------------------------------------------------- Termine
 
   private node(ev: Ev) {
-    const b = el("button", `ev k-${ev.kind}`);
+    const b = el("button", `ev k-${ev.kind}${ev.suggested ? " sug" : ""}`);
     b.dataset.id = ev.id;
     b.append(ico(KIND_ICON[ev.kind]), el("span", "ev-t"));
     this.tint(b, ev);
-    b.addEventListener("click", () => { if (ev.course != null) this.o.onOpen(ev.course); });
+    b.addEventListener("click", () => { if (ev.suggested) this.o.onSuggest(ev, b); else if (ev.course != null) this.o.onOpen(ev.course); });
     b.addEventListener("pointerenter", () => this.showTip(ev, b));
     b.addEventListener("focus", () => this.showTip(ev, b));
     b.addEventListener("pointerleave", () => { this.tip.hidden = true; });
@@ -298,7 +300,7 @@ export class Timeline {
     const maxLanes = Math.max(1, Math.floor((this.axis - 14) / 24));
     const order = [...this.events].sort((a, b) => weight(b) - weight(a) || a.ts - b.ts);
     for (const ev of order) {
-      const n = this.nodes.get(ev.id)!;
+      const n = this.nodes.get(key(ev))!;
       const d = dayOfTs(ev.ts) - today;
       const x1 = this.x(d, g), x2 = this.x(d + 1, g);
       const w = x2 - x1;
@@ -348,6 +350,7 @@ export class Timeline {
     const name = this.o.nameOf(ev.course);
     t.append(head, el("p", "tip-t", ev.title));
     if (name) t.append(el("p", "tip-c", name));
+    if (ev.suggested) t.append(el("p", "tip-s", `Vorschlag · ${ev.detail}`));
     const h = this.o.hueOf(ev.course);
     t.style.setProperty("--c", h == null ? "rgba(245,245,247,.8)" : hsl(h));
     t.hidden = false;
@@ -356,6 +359,9 @@ export class Timeline {
     t.style.transform = `translate(${left}px, ${Math.max(6, a.top - host.top - t.offsetHeight - 8)}px)`;
   }
 }
+
+/** Schluessel eines Termins im Knoten-Speicher: ein uebernommener Vorschlag bekommt einen neuen Knoten (ohne gestrichelten Rand) */
+const key = (e: Ev) => (e.suggested ? `${e.id}?` : e.id);
 
 /** Reihenfolge in der Stapelung: Pruefungen und Fristen liegen der Achse am naechsten */
 function weight(e: Ev) { return e.kind === "pruefung" ? 3 : e.kind === "frist" ? 2 : 1; }

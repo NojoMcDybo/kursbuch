@@ -33,6 +33,8 @@ export type TimetableOpts = {
   openWeb: (course: number) => void;
   /** Tag im Zeitstrahl zeigen (Klick auf das Datum) */
   onPick: (day: number) => void;
+  /** Klick auf einen Vorschlag (noch kein Termin): uebernehmen oder verwerfen */
+  onSuggest: (ev: Ev, anchor: HTMLElement) => void;
 };
 
 /** Doppelstunden an Universitaeten: 8–10, 10–12 … (Vorschlaege fuer erkannte Wochentage ohne Uhrzeit) */
@@ -290,16 +292,15 @@ Uhrzeit wählen`;
 
   /** Pille eines Termins von LearnWeb */
   private chip(e: Ev) {
-    const r = el("button", "tt-ev");
+    const r = el("button", e.suggested ? "tt-ev sug" : "tt-ev");
     const c = this.o.card(e.course);
     r.style.setProperty("--c", c ? hsl(c.hue) : "rgba(200,205,215,.9)");
     const time = e.allDay ? "" : new Date(e.ts * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
     const head = el("span", "tt-eh");
     head.append(ico(KIND_ICON[e.kind]), el("small", "", time));
     r.append(head, el("span", "tt-ex", e.short));
-    r.title = `${e.title}${time ? `
-${time}` : ""}`;
-    r.addEventListener("click", () => { if (e.course != null) this.o.openCourse(e.course); });
+    r.title = [e.title, time, e.suggested && `Vorschlag · ${e.detail}`].filter(Boolean).join("\n");
+    r.addEventListener("click", () => { if (e.suggested) this.o.onSuggest(e, r); else if (e.course != null) this.o.openCourse(e.course); });
     return r;
   }
 
