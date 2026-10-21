@@ -67,7 +67,7 @@ export class Timetable {
     this.file.hidden = true;
     this.file.addEventListener("change", () => void this.importFile());
     this.layer.hidden = true;
-    this.el.append(this.bar, this.tray, this.scroll, this.layer, this.file);
+    this.el.append(this.bar, this.scroll, this.layer, this.file);
     this.layer.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); void this.close(); } });
     this.ready = this.reload();
     window.setInterval(() => this.draw(), 60_000); // die Linie „jetzt“ wandert
@@ -337,7 +337,7 @@ ${time}` : ""}`;
       evs.append(cell);
     }
     const head = el("div", "tt-head");
-    head.append(names, evs);
+    head.append(names, this.tray, evs); // die Vorschlagsleiste gehoert zu den Terminen unter den Wochentagen (nicht darueber: sonst rutscht der Plan tiefer als Kurse und Abgaben)
     evs.hidden = !wk.some((l, i) => i < days && l.length);
     if (hidden || this.more) {
       const m = el("button", "tt-more", this.more ? "Weniger" : `+${hidden} weitere`);

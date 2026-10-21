@@ -1,6 +1,6 @@
 [package]
 name = "kursbuch"
-version = "0.3.1"
+version = "0.3.2"
 description = "Kursbuch - LearnWeb-Kurse, Fristen und Suche"
 authors = ["Nojo"]
 edition = "2021"

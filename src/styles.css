@@ -227,7 +227,7 @@ body.notched .grp.r { margin-left: 0; flex: 1; justify-content: flex-end; }
 .ap-id small { font-size: 11.5px; color: var(--n-dim); }
 
 /* ---------- Kursfenster: keine Leiste, die Seite fuellt das Fenster ---------- */
-.sheet.cw { top: 0; border-radius: 0; display: flex; flex-direction: column; box-shadow: none; }
+.sheet.cw { top: 0; border-radius: 0; display: flex; flex-direction: column; box-shadow: none; container-type: inline-size; }
 .cp { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .p-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 58px; padding: 12px calc(var(--pad) + 124px) 6px var(--pad); }
 body.full .p-head { padding-right: var(--pad); }
@@ -491,7 +491,8 @@ body[data-phase="short"].widget, body[data-phase="long"].widget { --pc: #8fdcbc;
 .cp > .p-body { grid-column: 1; }
 .p-side { grid-column: 2; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 6px var(--pad) 28px 8px; display: flex; flex-direction: column; gap: 30px; }
 .p-side::-webkit-scrollbar { display: none; }
-@media (max-width: 880px) { .cp { grid-template-columns: minmax(0, 1fr); } .p-side { display: none; } }
+/* Seitenspalte nur, wenn die Kursseite breit genug ist (Layer oder Fenster, nicht die Fensterbreite) */
+@container (max-width: 760px) { .cp { grid-template-columns: minmax(0, 1fr); } .p-side { display: none; } }
 .ps-h { display: flex; align-items: center; gap: 8px; margin: 0 4px 12px; font: 600 12px/1 var(--n-font); letter-spacing: 0.04em; color: var(--n-dim); }
 .ps-h svg { width: 15px; height: 15px; } .ps-h small { margin-left: auto; font-weight: 500; color: var(--n-faint); }
 .as { display: block; width: 100%; padding: 10px 12px; border-radius: 14px; text-align: left; background: rgba(255, 255, 255, 0.04); transition: background 0.2s var(--n-ease); }
@@ -660,3 +661,37 @@ body.dragging-course .tt-b:hover { translate: none; }
 @keyframes assign-color { from { background: color-mix(in srgb, rgba(200, 205, 215, 0.9) 20%, #1f1f23); box-shadow: inset 3px 0 0 rgba(200, 205, 215, 0.9); } }
 @keyframes assign-ring { 0% { outline: 0 solid color-mix(in srgb, var(--c) 70%, transparent); outline-offset: 0; } 100% { outline: 14px solid transparent; outline-offset: 6px; } }
 @media (prefers-reduced-motion: reduce) { .drag-ghost { transition-duration: 0.01ms; } body.dragging-course .tt-b.free, .tt-b.assigned { animation: none; } }
+
+/* ================= Version 0.3.2: Leiste, Zeitstrahl aus Glas, gleiche Hoehe, Kurs-Layer ================= */
+:root { --bar-h: 38px; --days-h: 36px; }
+
+/* Leiste: alle Module so gross wie die Fensterpille (38 px hoch, 4 px Rand, Knoepfe 30 px), mittig in der Leiste */
+.top .n-ico.n-glass, .acct, .find { width: var(--bar-h); height: var(--bar-h); border-radius: 17px; }
+.top .n-ico.n-glass svg { width: 16px; height: 16px; }
+.sems { height: var(--bar-h); padding: 4px; border-radius: 17px; align-items: center; }
+.sems button { height: 30px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 13px; }
+.sems .n-seg-thumb { top: 4px; bottom: 4px; border-radius: 13px; }
+.n-wc { top: calc((var(--top) - var(--bar-h)) / 2); }
+
+/* Zeitstrahl als Liquid-Glass-Flaeche */
+#tl-host { flex: none; padding: 6px 14px; border-radius: 30px; --n-lq-tint: rgba(255, 255, 255, 0.045); }
+
+/* Alles beginnt auf einer Hoehe: erste Kurszeile, erste Abgabe und die Termine/das Raster des Plans (unter den Wochentagen) */
+.tt-names { height: var(--days-h); align-items: center; }
+.tt-head { padding: 0; }
+.tt-evs:not([hidden]) { padding-bottom: 6px; }
+.tt-evc { padding: 0 3px; }
+.ab-h { margin-bottom: calc(var(--head-gap) + var(--days-h)); }
+.cl-h { margin-bottom: calc(var(--head-gap) + var(--days-h) - 4px); } /* 4 px: Abstand zwischen den Zeilen der Liste */
+.tt-head .tt-sug { margin: 0 0 8px; padding-top: 0; }
+
+/* ---------- Kurs im gleichen Fenster: Layer (courselayer.ts), nicht Vollbild ---------- */
+.clay { position: fixed; z-index: 50; inset: var(--top) 0 0 0; display: grid; padding: clamp(14px, 2.6vh, 32px) clamp(14px, 2.6vw, 44px); }
+.clay-scrim { position: absolute; inset: 0; border-radius: var(--radius, 30px) var(--radius, 30px) 0 0; background: rgba(6, 6, 9, 0.55); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); animation: fade 0.3s var(--n-ease) both; }
+.clay.out .clay-scrim { animation: fade 0.26s var(--n-ease) reverse both; }
+.clay-panel { --sheet-solid: #202023; position: relative; justify-self: center; width: min(1240px, 100%); min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: 28px; background: var(--sheet-solid); container-type: inline-size; outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 30px 80px rgba(0, 0, 0, 0.55); }
+.clay-panel .cp { flex: 1; min-height: 0; }
+.clay-panel .p-head { min-height: 64px; padding: 18px calc(var(--pad) + 96px) 8px var(--pad); }
+.clay-tools { position: absolute; z-index: 5; top: 16px; right: 16px; display: flex; gap: 8px; }
+@media (max-width: 880px) { .clay { padding: 10px; } .clay-panel .p-head { padding-right: 112px; } }

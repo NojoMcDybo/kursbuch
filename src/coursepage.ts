@@ -25,8 +25,9 @@ export class CoursePage {
   /** laufende Sofort-Downloads (cmid) */
   private busy = new Set<number>();
 
-  constructor(readonly id: number, private onView: (v: CourseView) => void) {
-    this.head.dataset.tauriDragRegion = "";
+  /** `drag`: der Kopf zieht das Fenster (eigenes Kursfenster); im Layer des Hauptfensters nicht */
+  constructor(readonly id: number, private onView: (v: CourseView) => void, private drag = true) {
+    if (drag) this.head.dataset.tauriDragRegion = "";
     this.el.append(this.head, this.body, this.side);
     this.el.style.setProperty("--h", "215");
   }
@@ -80,7 +81,7 @@ export class CoursePage {
     const acts = el("div", "p-acts");
     acts.append(ai, web, note, folder);
     // Titel links (zieht das Fenster), Aktionen rechts; rechts daneben schwebt die Fensterpille
-    const drag = (e: HTMLElement) => { e.dataset.tauriDragRegion = ""; return e; };
+    const drag = (e: HTMLElement) => { if (this.drag) e.dataset.tauriDragRegion = ""; return e; };
     const lead = drag(el("div", "cw-lead"));
     const sub = [v.teacher, v.semester].filter(Boolean).join(" · ");
     lead.append(drag(el("i", "cw-dot")), drag(el("h1", "cw-title", v.title)), ...(sub ? [drag(el("span", "cw-sub", sub))] : []));

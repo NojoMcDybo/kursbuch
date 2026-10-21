@@ -16,7 +16,7 @@ Auftrag und Entscheidungen: `C:\Users\nojod\learnweb-mcp\docs\desktop-app-prompt
 │ Kurse │ Stundenplan + Wochenkalender (eine Woche)│ Abgaben           │
 ```
 
-Liquid Glass tragen nur **Knöpfe und ausgewählte Elemente** (Konto, Semester, Lupe, Fensterknöpfe, Menüs, das Suchfenster);
+Liquid Glass tragen nur **Knöpfe und ausgewählte Elemente** (Konto, Semester, Lupe, Fensterknöpfe, Menüs, das Suchfenster) und der **Zeitstrahl** als Glasfläche; alle Module der Leiste sind gleich groß wie die Fensterpille (38 px hoch);
 alle Flächen und Karten sind matt (`--sheet`, `--card`). Jeder Kurs hat einen festen Farbton (`colors.rs`); der Nebel (`fog.ts`)
 trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
 
@@ -31,7 +31,7 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
 - **Zeitstrahl** (`timeline.ts`): ohne Rahmen, minimalistisch. Fischauge: 14 Tage im Fokus mit Tagesraster, links Vergangenheit und
   rechts Zukunft logarithmisch gestaucht. Heute ist eine gefüllte Pille und ein hoher, weich leuchtender Strich über die ganze
   Höhe. Mausrad, Ziehen, Pfeile (Umschalt = Woche), Home/„Heute“ verschieben den Fokus; ein Tag im Wochenkalender holt ihn in die Mitte.
-- **Kurse** (`courses.ts`, links): die Kurse des gewählten Semesters; ein Klick öffnet den Kurs in einem **eigenen Fenster**.
+- **Kurse** (`courses.ts`, links): die Kurse des gewählten Semesters; ein Klick öffnet den Kurs **im gleichen Fenster** als Layer (s. u.).
   Hinter dem Kurs steht die Zahl neuer oder aktualisierter Aktivitäten, das Haken-Symbol setzt sie zurück.
 - **Stundenplan und Wochenkalender in einem** (`timetable.ts`, `timetable.rs`, Mitte): immer **eine Woche**, anfangs die aktuelle, mit Pfeilen,
   Kalenderwoche und „Heute“ (die Zahl eines Tages holt ihn in den Zeitstrahl). Mo–Fr stehen immer da, **Samstag und Sonntag schieben sich ein**,
@@ -60,6 +60,10 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
   selbst an (✦, Quelle in der Karte), Funde ohne Uhrzeit stehen als Chips über dem Plan; ein Klick bietet Doppelstunden (8–10, 10–12 …)
   oder eine eigene Zeit an, ✕ verwirft den Fund für immer (`schedule-dismissed.json`). Was man löscht oder ändert, kommt nicht wieder.
   Nicht enthalten: Import aus LSF/HISinOne (dafür gibt es den .ics-Import).
+- **Kurs-Layer** (`courselayer.ts`): Ein Klick auf einen Kurs (Liste, Zeitstrahl, Stundenplan, Abgaben, Suche, Deep Link) öffnet die ganze Kursseite als
+  Layer über dem Dashboard, **nicht Vollbild** (Rand ringsum, abgedunkelter Hintergrund; die Leiste mit den Knöpfen bleibt bedienbar). Er wächst aus dem
+  angeklickten Element; Esc, das Kreuz oder ein Klick daneben schließen ihn, ein zweiter Kurs tauscht den Inhalt. Der Knopf „In eigenem Fenster“ öffnet den
+  alten Fenster-Modus. Die Seitenspalte (Abgaben, Dozenten) hängt an der Breite des Layers, nicht des Fensters.
 - **Kursfenster** (`coursewin.ts`, `coursepage.ts`, `windows.rs`): `index.html?kurs=<id>` (`kurs-<id>` als Fenster, ein zweiter
   Klick holt es nach vorn und zeigt die gewünschte Stelle). Die Kursseite ist eine fortlaufende Seite ohne Karten; Zeilen:
   Datei öffnen, kopieren, laden („zu groß“ lädt ein Klick trotzdem); neue Aktivitäten tragen einen Punkt. Das Design der Kursseite
@@ -166,4 +170,5 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - Umbau 3: Pomodoro-Widget, Beige-Hintergrund, Nunito Sans, Selbst-Update (v0.2.0), Inhalte ohne Datei im Kursfenster.
 - Umbau 4 (v0.3.0): Stundenplan und Wochenkalender in einem, automatische Erkennung von Kursen, Farben, Wochentagen und Zeiten, Abgleich aus der App mit Fortschritt, Widget ausblendbar, ruhigere Abstände und Animationen.
 - v0.3.1: Sicherheitsprüfung (`docs/sicherheitspruefung-0.3.0.md`): Content-Security-Policy, „Passwort speichern“ (Haken im Anmeldeformular), Gerätenamen, `mailto:`.
+- v0.3.2: Kurse per Ziehen dem Stundenplan zuordnen, Kurs-Layer im gleichen Fenster, Zeitstrahl als Glasfläche, Leistenmodule gleich groß, Spalten beginnen auf einer Höhe.
 - Phase 5: KI (Laya): Termine und Fristen aus Folien als Vorschläge. Phase 6: Sync aus der App, Einstellungen, Installer.

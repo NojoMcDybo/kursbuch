@@ -12,6 +12,8 @@ import { api, type Ev, type Link, type NewItem, type Overview } from "./api";
 import { Abgaben } from "./abgaben";
 import { Account, loginForm } from "./account";
 import { Courses } from "./courses";
+import { CourseLayer } from "./courselayer";
+import type { Target as CourseTarget } from "./coursepage";
 import { mountCourseWindow } from "./coursewin";
 import { todayDay } from "./dates";
 import { FocusScene } from "./focus";
@@ -37,6 +39,7 @@ let tt: Timetable;
 let account: Account;
 let search: Search;
 let focus: FocusScene;
+let clay: CourseLayer;
 let sync: SyncUi;
 
 const KEY_LOGIN = "kursbuch-login";
@@ -106,6 +109,7 @@ function scenesChanged() {
   renderSems();
   tint();
   paintWidgetBtn();
+  if (isFocus() || isLocked()) clay?.close(); // der Kurs-Layer gehoert zur Ansicht, nicht zum Fokus-Modus oder zum Anmeldebild
 }
 
 /** Widget-Fenster oeffnen/schliessen; die gemerkte Lage geht mit */
@@ -211,10 +215,11 @@ async function refresh() {
   tt.setSemester(courses.semester);
   tt.refresh();
   tt.setSuggestions(sug);
+  clay?.refresh(); // ein offener Kurs zeigt auch neue Daten (nach dem Sync)
 }
 
 async function go(l: Link) {
-  if (l.view === "kurs") act(api.openCourse(l.arg));
+  if (l.view === "kurs") { if (!isLocked()) void clay.open(l.arg); }
   else if (l.view === "suche") search.open(l.arg);
   else if (l.view === "fokus") { if (!isLocked()) setFocus(true); scenesChanged(); }
   else if (l.view === "heute") {
@@ -245,7 +250,8 @@ async function main() {
 
   const hueOf = (id: number | null) => courses.hueOf(id);
   const nameOf = (id: number | null) => courses.nameOf(id);
-  const open = (id: number) => act(api.openCourse(id));
+  clay = new CourseLayer();
+  const open = (id: number, target: CourseTarget = {}) => { if (!isLocked()) void clay.open(id, target); };
   const nextOf = (id: number) => events.filter((e) => e.course === id && e.ts >= Date.now() / 1000 - 3600).sort((a, b) => a.ts - b.ts)[0];
 
   // gemerkter Stand: wer zuletzt angemeldet war, sieht sofort die Ansicht (die Pruefung folgt im Hintergrund)
@@ -276,7 +282,7 @@ async function main() {
     hueOf, nameOf,
     semesterIds: () => courses.semesterIds(),
     semesterLabel: () => (courses.semester ? shortSem(courses.semester) : ""),
-    reveal: (id, target) => api.openCourse(id, target?.cmid, target?.section),
+    reveal: async (id, target) => { open(id, target ?? {}); },
     anchor: () => q(".find"),
     onToggle: (on) => fog.hold(on),
   });
@@ -336,7 +342,7 @@ async function main() {
   scrim.addEventListener("click", closeDrawer);
   document.addEventListener("keydown", (e) => {
     if (isSearchKey(e)) { e.preventDefault(); search.open(); return; }
-    if (e.key === "Escape") { if (document.body.classList.contains("dr")) closeDrawer(); else if (isFocus()) { setFocus(false); scenesChanged(); } else if (document.body.classList.contains("full")) void setFull(false); }
+    if (e.key === "Escape") { if (clay.isOpen) clay.close(); else if (document.body.classList.contains("dr")) closeDrawer(); else if (isFocus()) { setFocus(false); scenesChanged(); } else if (document.body.classList.contains("full")) void setFull(false); }
     if (e.key === "F11") { e.preventDefault(); void setFull(!document.body.classList.contains("full")); }
   });
 
@@ -349,7 +355,7 @@ async function main() {
   await listen<Link>("open-link", (e) => { void api.takePending(); void go(e.payload); });
   const pending = await api.takePending().catch(() => null);
   if (pending) await go(pending);
-  window.addEventListener("focus", () => void refresh());
+  window.addEventListener("focus", () => { void refresh(); clay.refresh(); });
   // Restzeiten und „heute“ nachziehen
   window.setInterval(() => { abgaben.render(events); tl.refresh(); }, 60_000);
 }
