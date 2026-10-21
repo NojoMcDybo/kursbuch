@@ -75,7 +75,7 @@ export class CoursePage {
     ]));
     const web = iconBtn("external", "LearnWeb", "n-ico sm n-glass n-liquid", () => act(api.openWeb(v.id)));
     web.disabled = !v.web;
-    const note = iconBtn("open", v.note ? "Notiz in Obsidian" : "Noch keine Notiz", "n-ico sm n-glass n-liquid", () => act(api.openNote(v.id)));
+    const note = iconBtn("open", v.note ? "Notiz in Obsidian" : "Keine Obsidian-Notiz (braucht einen Obsidian-Tresor)", "n-ico sm n-glass n-liquid", () => act(api.openNote(v.id)));
     note.disabled = !v.note;
     const folder = iconBtn("folder", "Ordner", "n-ico sm n-glass n-liquid", () => act(api.openFolder(v.id)));
     const acts = el("div", "p-acts");

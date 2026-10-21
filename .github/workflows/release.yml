@@ -34,7 +34,19 @@ jobs:
           }
           "tag=$tag" >> $env:GITHUB_OUTPUT
       - run: npm ci --include=dev
-      - run: npx tauri build --bundles nsis
+      # die Python-Seite (bridge/) wird zu learnweb-bridge.exe; der Installer liefert sie mit, damit niemand Python oder uv braucht
+      - uses: astral-sh/setup-uv@v5
+      - name: Bruecke bauen und pruefen
+        run: |
+          ./tools/build-bridge.ps1
+          $exe = 'bridge-dist/learnweb-bridge/learnweb-bridge.exe'
+          if (-not (Test-Path $exe)) { throw "$exe fehlt" }
+          # Selbsttest ohne Netz: Tresor, Zertifikate, Suche, Dateileser, Datenordner
+          $env:LEARNWEB_HOME = Join-Path $env:RUNNER_TEMP 'bridge-selftest'
+          $out = & $exe selftest | Select-Object -Last 1
+          Write-Host $out
+          if (-not (($out | ConvertFrom-Json).ok)) { throw 'Selbsttest der Bruecke fehlgeschlagen' }
+      - run: npx tauri build --bundles nsis --config src-tauri/tauri.bridge.conf.json
         env:
           # signiert das Update (.sig); den passenden oeffentlichen Schluessel prueft die App
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

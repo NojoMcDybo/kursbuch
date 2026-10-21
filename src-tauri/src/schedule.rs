@@ -126,7 +126,7 @@ mod tests {
             serde_json::json!({"last_run": 1, "courses": {"7": {"id": 7, "name": "VL Sportpsychologie SoSe 2026, Bernd Strauß", "dir": "x", "cms": {}}, "8": {"id": 8, "name": "Seminar WiSe 2026/27", "dir": "y", "cms": {}}}}).to_string(),
         )
         .unwrap();
-        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false };
+        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false, bridge: None };
         (dir, p)
     }
 

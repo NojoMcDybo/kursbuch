@@ -36,6 +36,7 @@ mod open;
 mod pomodoro;
 mod py;
 mod schedule;
+mod settings;
 mod suggestions;
 mod search;
 mod share;
@@ -119,6 +120,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             overview,
@@ -159,6 +161,9 @@ pub fn run() {
             sync::sync_running,
             schedule::schedule_get,
             suggestions::suggestion_decide,
+            settings::settings_get,
+            settings::settings_set_ziel,
+            settings::open_ziel,
             schedule::schedule_dismiss,
         ])
         .setup(|app| {

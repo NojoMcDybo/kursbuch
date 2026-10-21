@@ -141,6 +141,7 @@ function paintWidgetBtn() {
 function working(on: boolean) {
   const card = q(".lg-card");
   card.classList.toggle("working", on);
+  if (on) void api.settingsGet().then((s) => sync.setFolder(s.ziel)).catch(() => {});
   card.querySelector("form")!.hidden = on;
   card.querySelector<HTMLElement>(".sp")!.hidden = !on;
   card.querySelector(".lg-brand span")!.textContent = on ? "Einen Moment, ich richte alles ein" : "mit LearnWeb anmelden";

@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn rejects_bad_input_before_any_process_starts() {
-        let p = Paths { project: "x".into(), uv: "gibt-es-nicht.exe".into(), config: "x".into(), notch: false };
+        let p = Paths { project: "x".into(), uv: "gibt-es-nicht.exe".into(), config: "x".into(), notch: false, bridge: None };
         assert_eq!(login(&p, "-x", "pw", true).unwrap_err(), "Die Kennung ist ungültig.");
         assert_eq!(login(&p, "abc", "", false).unwrap_err(), "Das Passwort fehlt.");
         assert_eq!(login(&p, "abc", "a\nb", true).unwrap_err(), "Das Passwort fehlt.");

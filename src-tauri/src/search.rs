@@ -296,7 +296,7 @@ mod tests {
             Proj(p)
         }
         fn paths(&self) -> Paths {
-            Paths { project: self.0.clone(), uv: self.0.clone(), config: self.0.clone(), notch: false }
+            Paths { project: self.0.clone(), uv: self.0.clone(), config: self.0.clone(), notch: false, bridge: None }
         }
     }
     impl Drop for Proj {
@@ -375,7 +375,7 @@ mod tests {
             assert!(r.indexed);
             let _ = search(&paths, q, true, &[]);
         }
-        let none = Paths { project: p.0.join("nix"), uv: p.0.clone(), config: p.0.clone(), notch: false };
+        let none = Paths { project: p.0.join("nix"), uv: p.0.clone(), config: p.0.clone(), notch: false, bridge: None };
         assert!(!search(&none, "x", false, &[]).indexed);
     }
 

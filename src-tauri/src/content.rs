@@ -190,7 +190,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("kursbuch-content-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("data")).unwrap();
-        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.clone(), notch: false };
+        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.clone(), notch: false, bridge: None };
         assert!(extras(&p, 7).unwrap().news.is_empty()); // ohne Datei: leer
         std::fs::write(
             dir.join("data").join("content.json"),

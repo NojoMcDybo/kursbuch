@@ -1,4 +1,5 @@
-//! Aufruf der Python-Seite (`uv run python -m learnweb.cli …` im Projektordner). Nur die Python-Seite spricht mit LearnWeb und
+//! Aufruf der Python-Seite (`uv run python -m learnweb.cli …` im Projektordner, oder die mitgelieferte `learnweb-bridge.exe`, siehe data.rs; gleiche
+//! Argumente, gleiche Antworten). Nur die Python-Seite spricht mit LearnWeb und
 //! kennt die Zugangsdaten; die App bekommt die JSON-Antwort (letzte JSON-Zeile der Ausgabe). Einzige Ausnahme: eine Anmeldung
 //! ohne „Passwort speichern“ haelt das Passwort bis zum Abmelden oder Beenden im Speicher (siehe `set_session`).
 
@@ -32,8 +33,19 @@ fn needs_login(args: &[&str]) -> bool {
 /// Umgebung), die Kennung ueber `LEARNWEB_USER`.
 fn base(paths: &Paths, args: &[&str]) -> (Command, Option<String>) {
     let session = if needs_login(args) { SESSION.lock().unwrap().clone() } else { None };
-    let mut c = Command::new(&paths.uv);
-    c.args(["run", "python", "-m", "learnweb.cli"]);
+    // mitgelieferte Bruecke: dasselbe Programm ohne uv; LEARNWEB_HOME sagt ihr, wo data/ und sync_config.json liegen
+    let mut c = match &paths.bridge {
+        Some(exe) => {
+            let mut c = Command::new(exe);
+            c.env("LEARNWEB_HOME", &paths.project);
+            c
+        }
+        None => {
+            let mut c = Command::new(&paths.uv);
+            c.args(["run", "python", "-m", "learnweb.cli"]);
+            c
+        }
+    };
     if session.is_some() {
         c.arg("--password-stdin");
     }
@@ -94,11 +106,24 @@ mod tests {
     use std::ffi::OsStr;
 
     fn paths() -> Paths {
-        Paths { project: "x".into(), uv: "uv.exe".into(), config: "x".into(), notch: false }
+        Paths { project: "x".into(), uv: "uv.exe".into(), config: "x".into(), notch: false, bridge: None }
     }
 
     fn args(c: &Command) -> Vec<String> {
         c.get_args().map(|a| a.to_string_lossy().into_owned()).collect()
+    }
+
+    #[test]
+    fn bundled_bridge_is_called_directly_with_the_data_folder_in_the_environment() {
+        let mut p = paths();
+        p.project = r"C:\Users\Jörg Müller\bridge".into();
+        p.bridge = Some(r"C:\Programme\Kursbuch\bridge\learnweb-bridge.exe".into());
+        let (c, _) = base(&p, &["status"]);
+        assert!(c.get_program().to_string_lossy().ends_with("learnweb-bridge.exe") && args(&c) == ["status"]); // kein uv, kein python -m
+        assert!(c.get_envs().any(|(k, v)| k == OsStr::new("LEARNWEB_HOME") && v == Some(OsStr::new(&p.project))));
+        p.bridge = None;
+        let (c, _) = base(&p, &["status"]); // Entwickler-Betrieb wie bisher
+        assert!(c.get_program().to_string_lossy().ends_with("uv.exe") && args(&c) == ["run", "python", "-m", "learnweb.cli", "status"]);
     }
 
     #[test]

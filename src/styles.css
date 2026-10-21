@@ -732,3 +732,11 @@ body.dragging-course .tt-b:hover { translate: none; }
 .ev.sug.dot { background: transparent; outline-offset: -1px; box-shadow: none; }
 .ev.sug.dot::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: color-mix(in srgb, var(--c) 55%, transparent); }
 .tip-s { margin-top: 4px; font-size: 11px; color: var(--n-faint); }
+
+/* ---------- Einstellung: Ordner der Kursdateien (Konto-Menue) und Hinweis auf der Fortschrittskarte ---------- */
+.ap-dir { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--n-line); font-size: 12px; color: var(--n-dim); }
+.ap-dir-p { color: var(--n-ink); overflow-wrap: anywhere; line-height: 1.4; }
+.ap-dir-a { display: flex; gap: 8px; }
+.ap-dir .n-btn { height: 30px; padding: 0 14px; font-size: 12px; border-radius: 15px; }
+.sp-f { text-align: center; font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; color: rgb(var(--sc) / 0.6); }
+.sp-f:empty { display: none; }

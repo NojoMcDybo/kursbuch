@@ -30,6 +30,8 @@ const AFTER: Record<string, [string, number]> = {
 
 export class SyncUi {
   state: SyncState = idle();
+  /** Ordner der Kursdateien (steht auf der Fortschrittskarte, damit niemand suchen muss) */
+  private folder = "";
   private subs = new Set<() => void>();
 
   /** `onEnd(ok)` nach jedem Lauf (auch bei Fehler); die Ansicht holt dann den neuen Stand */
@@ -37,6 +39,8 @@ export class SyncUi {
     void listen<SyncEvent>("sync-event", (e) => this.on(e.payload));
     void api.syncRunning().then((r) => { if (r) this.set({ running: true, step: "Synchronisiere …" }); }).catch(() => {});
   }
+
+  setFolder(path: string) { this.folder = path; this.subs.forEach((f) => f()); }
 
   subscribe(fn: () => void) { this.subs.add(fn); return () => this.subs.delete(fn); }
 
@@ -103,7 +107,7 @@ export class SyncUi {
   card(retry: () => void, skip: () => void): HTMLElement {
     const box = el("div", "sp");
     const head = el("div", "sp-h"), title = el("b"), fill = el("i"), bar = el("div", "sp-bar");
-    const line = el("p", "sp-s"), sub = el("p", "sp-c"), row = el("div", "sp-a");
+    const line = el("p", "sp-s"), sub = el("p", "sp-c"), row = el("div", "sp-a"), dir = el("p", "sp-f");
     bar.append(fill);
     bar.setAttribute("role", "progressbar");
     const again = el("button", "n-btn primary", "Nochmal versuchen"), open = el("button", "n-btn", "Trotzdem öffnen");
@@ -111,7 +115,7 @@ export class SyncUi {
     open.addEventListener("click", skip);
     row.append(again, open);
     const wheel = ico("refresh", 20), cross = ico("close", 20);
-    box.append(head, bar, line, sub, row);
+    box.append(head, bar, line, sub, dir, row);
     const paint = () => {
       const s = this.state;
       box.classList.toggle("err", !!s.error);
@@ -121,6 +125,8 @@ export class SyncUi {
       bar.setAttribute("aria-valuenow", String(Math.round(s.progress * 100)));
       line.textContent = s.error ?? (s.step || "Einen Moment …");
       sub.textContent = s.error ? "" : s.course || (s.total ? `${s.total} Kurse` : "Kursbuch ordnet alles von selbst ein.");
+      dir.textContent = this.folder ? `Die Dateien landen in ${this.folder}` : "";
+      dir.title = this.folder;
       again.disabled = s.running;
       row.hidden = !s.error;
     };

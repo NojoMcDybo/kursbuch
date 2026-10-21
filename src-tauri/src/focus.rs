@@ -279,7 +279,7 @@ mod tests {
     fn save_keeps_sessions_and_log_prunes_old_ones() {
         let dir = std::env::temp_dir().join(format!("kursbuch-focus-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false };
+        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false, bridge: None };
         let now = at(2026, 10, 14, 15);
         assert!(get(&p).unwrap().lists.is_empty());
         let st = log(&p, 25, "Kapitel 3", now).unwrap();

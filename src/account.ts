@@ -5,6 +5,7 @@
  */
 
 import { listen } from "@tauri-apps/api/event";
+import { open as pickFolder } from "@tauri-apps/plugin-dialog";
 import { api, type Account as Status, type Upd } from "./api";
 import { ago } from "./dates";
 import { el, ico, iconBtn, leave, message, toast } from "./ui";
@@ -67,6 +68,8 @@ export class Account {
   private status: Status | null = null;
   private lastRun: number | null = null;
   private upd: Upd | null = null;
+  /** zuletzt gelesener Ordner der Kursdateien (das Menue zeichnet sich oft neu, die Bruecke soll nicht jedes Mal gefragt werden) */
+  private zielCache = "";
 
   constructor(private o: AccountOpts) {
     void api.updateState().then((u) => { this.upd = u; this.paintDot(); }).catch(() => {});
@@ -129,6 +132,34 @@ export class Account {
     void this.refresh();
   }
 
+  /** Ordner der Kursdateien: anzeigen, im Explorer oeffnen, aendern (Ordnerwahl). Ohne Kommandozeile, auch fuer Freunde, die nur den Installer haben. */
+  private folderRow() {
+    const row = el("div", "ap-dir");
+    const path = el("span", "ap-dir-p", this.zielCache || "…");
+    path.title = this.zielCache;
+    const open = el("button", "n-btn", "Öffnen");
+    const change = el("button", "n-btn", "Ändern …");
+    if (!this.zielCache) api.settingsGet().then((s) => { this.zielCache = s.ziel; path.textContent = s.ziel; path.title = s.ziel; }).catch(() => { path.textContent = "nicht verfügbar"; });
+    open.addEventListener("click", () => void api.openZiel().catch((e) => toast(message(e))));
+    change.addEventListener("click", async () => {
+      try {
+        const chosen = await pickFolder({ directory: true, multiple: false, defaultPath: path.title || undefined, title: "Ordner für die Kursdateien" });
+        if (typeof chosen !== "string") return;
+        await api.settingsSetZiel(chosen);
+        this.zielCache = chosen;
+        path.textContent = chosen;
+        path.title = chosen;
+        toast("Ordner gespeichert. Beim nächsten Abgleich lädt Kursbuch die Dateien dorthin.");
+      } catch (e) {
+        toast(message(e));
+      }
+    });
+    const acts = el("div", "ap-dir-a");
+    acts.append(open, change);
+    row.append(el("span", "ap-dir-l", "Kursdateien"), path, acts);
+    return row;
+  }
+
   /** Version und Selbst-Update (Rust: update.rs): sucht beim Start und alle 6 Stunden; hier auch auf Wunsch */
   private updateRow() {
     const u = this.upd ?? { status: "idle", current: "" } as Upd;
@@ -159,14 +190,14 @@ export class Account {
         out.disabled = true;
         api.accountLogout().then(() => { toast("Abgemeldet"); return this.refresh(); }).then(() => this.o.onChange()).catch((e) => toast(message(e))).finally(() => { out.disabled = false; });
       });
-      pop.replaceChildren(head, out, this.updateRow());
+      pop.replaceChildren(head, out, this.folderRow(), this.updateRow());
       return;
     }
     const form = loginForm(() => { void this.refresh().then(() => this.o.onChange()); });
     const head = el("div", "ap-t");
     head.append(ico("lock"), el("span", "", "LearnWeb"));
     form.prepend(head);
-    pop.replaceChildren(form, this.updateRow());
+    pop.replaceChildren(form, this.folderRow(), this.updateRow());
     form.querySelector<HTMLInputElement>("input")?.focus();
   }
 }

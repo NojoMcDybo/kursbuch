@@ -484,7 +484,7 @@ mod tests {
     fn store_roundtrips_per_semester_and_quarantines_a_corrupt_file() {
         let dir = std::env::temp_dir().join(format!("kursbuch-tt-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false };
+        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false, bridge: None };
         assert!(load(&p).unwrap().is_empty());
         save(&p, "WiSe 2026/27", vec![e("a", "Seminar", 1, 600, 720, "H1")]).unwrap();
         save(&p, "SoSe 2026", vec![e("b", "Tennis", 3, 900, 1020, "")]).unwrap();

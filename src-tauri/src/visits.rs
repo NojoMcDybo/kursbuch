@@ -117,7 +117,7 @@ mod tests {
     fn first_start_has_nothing_new_and_mark_read_survives_restarts() {
         let dir = std::env::temp_dir().join(format!("kursbuch-visits-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let paths = Paths { project: dir.clone(), uv: dir.clone(), config: dir.clone(), notch: false };
+        let paths = Paths { project: dir.clone(), uv: dir.clone(), config: dir.clone(), notch: false, bridge: None };
         let first = Visits::load(&paths);
         assert!(first.threshold() >= now() - 2, "beim ersten Start zaehlt alles bis jetzt als gesehen");
         let t = first.threshold();

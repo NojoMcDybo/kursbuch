@@ -5,7 +5,7 @@ des gewählten Semesters und Fristen. Arbeitet auf den **lokalen** Daten des Syn
 `D:\Dev\nojo-design` (Kopie unter `src/nojo/`, aktualisieren mit
 `powershell -File D:\Dev\nojo-design\tools\sync.ps1 -Only kursbuch`).
 
-Auftrag und Entscheidungen: `C:\Users\nojod\learnweb-mcp\docs\desktop-app-prompt.md`.
+Auftrag und Entscheidungen stehen im privaten Entwicklungsordner der Python-Seite.
 
 ## Aufbau der Oberfläche
 
@@ -123,8 +123,12 @@ Kursbuch ──liest──► sync_state.json, sync_config.json, deadlines.json,
 - `visits.rs` „Neu seit dem letzten Öffnen“, `colors.rs` Kursfarben, `notch.rs` Notch, `open.rs` Öffnen (nur IDs von der
   Oberfläche, Pfade unter dem Zielordner, PDFs direkt in Folio), `links.rs` Deep Link
 
-Python-Projekt und `uv.exe` liegen standardmäßig unter `%USERPROFILE%\learnweb-mcp` und `%USERPROFILE%\.local\bin\uv.exe`
-(überschreibbar über `settings.json` in `%APPDATA%\de.nojo.kursbuch`; dort schaltet `"notch": false` die Notch-Karte ab).
+**Zwei Betriebsarten** (`data.rs`, `Paths::choose`), automatisch gewählt: *Mitgeliefert* (Installer von GitHub): Kursbuch ruft die beigelegte
+`learnweb-bridge.exe` auf (`LEARNWEB_HOME` = `%APPDATA%\de.nojo.kursbuch\bridge`, dort liegen `data/` und `sync_config.json`); niemand braucht Python
+oder uv. *Entwickler*: gibt es `%USERPROFILE%\learnweb-mcp` (mit `pyproject.toml`) und `%USERPROFILE%\.local\bin\uv.exe`, ruft Kursbuch wie bisher
+`uv run python -m learnweb.cli` dort auf; der Daten- und Notiz-Betrieb (Vault, geplanter Sync, MCP-Server) bleibt unberührt. Überschreibbar über
+`settings.json` in `%APPDATA%\de.nojo.kursbuch` (`project`, `uv`; `"notch": false` schaltet die Notch-Karte ab). Der Kursordner (Vorgabe
+`Dokumente\Kursbuch\LearnWeb`) lässt sich im Konto-Menü anzeigen, öffnen und ändern; Obsidian-Notizen gibt es nur, wenn über dem Ordner ein Obsidian-Tresor liegt.
 Zum Ausprobieren gegen Kopien: Umgebungsvariablen `KURSBUCH_PROJECT` (Projektordner), `KURSBUCH_CONFIG` (App-Ordner) und `KURSBUCH_DOWNLOADS`
 (Zielordner des .ics-Exports; ohne sie zeigt der Export die Datei im Explorer).
 
@@ -150,16 +154,18 @@ im Konto-Menü steht **Installieren** (lädt, prüft die Signatur mit dem öffen
 Notch, und startet neu).
 
 Veröffentlichen: Version in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml` und `src-tauri/tauri.conf.json` erhöhen, committen, Tag
-`v<version>` pushen. `.github/workflows/release.yml` baut, signiert (Secret `TAURI_SIGNING_PRIVATE_KEY`; der private Schlüssel liegt nur unter
-`%USERPROFILE%\.tauri
-ojo-updater.key`) und hängt Installer und `latest.json` an das Release. Einmalig: Repository `NojoMcDybo/kursbuch` anlegen
-und das Secret setzen (`gh secret set TAURI_SIGNING_PRIVATE_KEY < %USERPROFILE%\.tauri
-ojo-updater.key`).
+`v<version>` pushen. `.github/workflows/release.yml` baut zuerst die Python-Seite zu `learnweb-bridge.exe` (`tools/build-bridge.ps1` aus `bridge/`, mit
+Selbsttest), dann den Installer, signiert (Secret `TAURI_SIGNING_PRIVATE_KEY`; der private Schlüssel liegt nur unter
+`%USERPROFILE%\.tauri\nojo-updater.key`) und hängt Installer und `latest.json` an das Release. Einmalig: Repository `NojoMcDybo/kursbuch` anlegen
+und das Secret setzen (`gh secret set TAURI_SIGNING_PRIVATE_KEY < %USERPROFILE%\.tauri\nojo-updater.key`).
 
-Lokal bauen: `npx tauri build --bundles nsis` (Installer unter `src-tauri	arget
-eleaseundle
-sis`, bei fremdem `CARGO_TARGET_DIR` dort).
+Lokal bauen: erst die Brücke (`tools\build-bridge.ps1`, Ergebnis in `bridge-dist\`), dann
+`npx tauri build --bundles nsis --config src-tauri/tauri.bridge.conf.json` (Installer unter `src-tauri\target\release\bundle\nsis`, bei fremdem
+`CARGO_TARGET_DIR` dort). Ohne `--config` entsteht ein Installer ohne Brücke; der taugt nur, wo `learnweb-mcp` und `uv` vorhanden sind (Entwickler-Betrieb).
 Installer per Explorer starten (die Claude-App läuft virtualisiert); Installation außerhalb von AppData: `Kursbuch_…-setup.exe /S /D=D:\Dev\_apps\Kursbuch`.
+
+Die Brücke in `bridge/` ist ein bereinigter Schnappschuss des Entwicklungsordners der Python-Seite: `tools\sync-bridge.ps1 -Source <Ordner> [-Kennung <Uni-Kennung>]`
+kopiert, ersetzt die Kennung im Test, prüft, dass keine persönlichen Angaben darin stehen, und lässt die Tests laufen. `bridge/` nicht von Hand ändern.
 
 ## Entwickeln
 
@@ -179,4 +185,4 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - v0.3.1: Sicherheitsprüfung (`docs/sicherheitspruefung-0.3.0.md`): Content-Security-Policy, „Passwort speichern“ (Haken im Anmeldeformular), Gerätenamen, `mailto:`.
 - v0.3.3: Spalten als Karten (klare Trennung, gleiche Kopf-, Unter- und Inhaltszeile), Vorschläge aus Kurstexten (Phase 5), Abgaben mit Leerzustand.
 - v0.3.2: Kurse per Ziehen dem Stundenplan zuordnen, Kurs-Layer im gleichen Fenster, Zeitstrahl als Glasfläche, Leistenmodule gleich groß, Spalten beginnen auf einer Höhe.
-- Phase 5: KI (Laya): Termine und Fristen aus Folien als Vorschläge. Phase 6: Sync aus der App, Einstellungen, Installer.
+- Zum Weitergeben (siehe `docs/weitergeben.md`): Brücke als `learnweb-bridge.exe` im Installer, Kursordner im Konto-Menü, Obsidian optional.

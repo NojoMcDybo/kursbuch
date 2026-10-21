@@ -1,4 +1,4 @@
-//! Datenvertrag mit der Python-Seite (C:\Users\nojod\learnweb-mcp, siehe dort README): data/sync_state.json und
+//! Datenvertrag mit der Python-Seite (`bridge/`, die mitgelieferte Brücke, bzw. `~\learnweb-mcp` im Entwickler-Betrieb): data/sync_state.json und
 //! sync_config.json. Gelesen wird nur, was die App braucht; Unbekanntes bleibt unbeachtet, damit neue Felder auf der
 //! Python-Seite die App nicht stoeren.
 

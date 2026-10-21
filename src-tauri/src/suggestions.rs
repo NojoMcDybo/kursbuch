@@ -117,7 +117,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("data")).unwrap();
         std::fs::write(dir.join("data").join("suggestions.json"), format!(r#"{{"items": {items}}}"#)).unwrap();
-        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false };
+        let p = Paths { project: dir.clone(), uv: dir.clone(), config: dir.join("cfg"), notch: false, bridge: None };
         (dir, p)
     }
 
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn no_file_no_suggestions() {
-        let p = Paths { project: "gibt-es-nicht".into(), uv: "x".into(), config: "gibt-es-nicht".into(), notch: false };
+        let p = Paths { project: "gibt-es-nicht".into(), uv: "x".into(), config: "gibt-es-nicht".into(), notch: false, bridge: None };
         let mut ev = vec![];
         apply(&p, &mut ev);
         assert!(ev.is_empty());
