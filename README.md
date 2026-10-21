@@ -57,7 +57,7 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
   Literaturangaben oder Abschnittsnummern, im Zeitfenster von gestern bis +300 Tagen und im Semester des Kurses (ohne Jahresangabe zählt das passende Jahr).
   Sie erscheinen **gestrichelt** im Zeitstrahl und in der Woche (nie in den Abgaben oder der Notch); ein Klick fragt „Als Termin übernehmen“ oder „Verwerfen“
   (kommt nicht wieder) und nennt Quelle und Sicherheit. Gemessen: Regeln ordnen zu rund 80 % richtig ein; **Laya** (Zero-Shot, englisches Modell) war nicht
-  besser und mit 2–6 s je Textstelle langsam – Messung in `learnweb-mcp/docs/phase5-laya-messung.md`. Laya bleibt ein möglicher Helfer für die Sicherheit.
+  besser und mit 2–6 s je Textstelle langsam – Messung in `learnweb-mcp/docs/phase5-laya-messung.md`. **Laya ist draußen** (Entscheidung von Nojo, 2026-10-21).
 - **Automatische Erkennung** (`learnweb/schedule.py`, `schedule.rs`, `syncui.ts`): Nach der Anmeldung läuft der Abgleich von selbst (Fortschritt auf dem
   Anmeldebild, später der Knopf mit den zwei Pfeilen in der Leiste; beim Start gleicht Kursbuch ab, wenn der Stand älter als 20 Stunden ist).
   Kurse: `kurse_ab: "auto"` nimmt das vorige und das laufende Semester. Farben: jeder Kurs bekommt seinen Farbton selbst (`colors.rs`).
