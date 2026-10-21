@@ -56,6 +56,14 @@ fn base(paths: &Paths, args: &[&str]) -> (Command, Option<String>) {
     (c, session.map(|s| s.1))
 }
 
+/// Startfehler benennen, was nicht startet (mit der mitgelieferten Bruecke ist uv nie im Spiel; ein Virenscanner kann sie sperren)
+fn start_error(paths: &Paths, e: &std::io::Error) -> String {
+    match &paths.bridge {
+        Some(exe) => format!("Die mitgelieferte Brücke ({}) lässt sich nicht starten: {e}. Blockiert ein Virenscanner das Programm?", exe.display()),
+        None => format!("Die Python-Seite (uv) lässt sich nicht starten: {e}"),
+    }
+}
+
 /// Befehl ausfuehren und die Ausgabe (stdout) zurueckgeben. `stdin` geht als eine Zeile an den Prozess (Passwoerter nie als Argument).
 pub fn cli(paths: &Paths, args: &[&str], stdin: Option<&str>) -> Result<String, String> {
     let (mut cmd, pw) = base(paths, args);
@@ -65,7 +73,7 @@ pub fn cli(paths: &Paths, args: &[&str], stdin: Option<&str>) -> Result<String, 
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Die Python-Seite (uv) lässt sich nicht starten: {e}"))?;
+        .map_err(|e| start_error(paths, &e))?;
     if let (Some(line), Some(mut pipe)) = (line, child.stdin.take()) {
         // Schreibfehler (Prozess schon beendet) zeigt sich unten an der Antwort; das Rohr schliesst beim Verlassen des Blocks
         let _ = pipe.write_all(line.as_bytes()).and_then(|_| pipe.write_all(b"\n"));
@@ -83,7 +91,7 @@ pub fn stream(paths: &Paths, args: &[&str], mut on_line: impl FnMut(&str)) -> Re
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("Die Python-Seite (uv) lässt sich nicht starten: {e}"))?;
+        .map_err(|e| start_error(paths, &e))?;
     if let (Some(line), Some(mut pipe)) = (pw, child.stdin.take()) {
         let _ = pipe.write_all(line.as_bytes()).and_then(|_| pipe.write_all(b"\n")); // das Rohr schliesst hier
     }

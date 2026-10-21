@@ -22,7 +22,7 @@ try {
   Run $uv sync --quiet
   if ($LASTEXITCODE -ne 0) { throw "uv sync ist fehlgeschlagen ($LASTEXITCODE)" }
   if (Test-Path (Join-Path $Out 'learnweb-bridge')) { Remove-Item -Recurse -Force (Join-Path $Out 'learnweb-bridge') }
-  Run $uv run --with pyinstaller pyinstaller --noconfirm --clean --onedir --console --name learnweb-bridge `
+  Run $uv run --with pyinstaller==6.22.3 pyinstaller --noconfirm --clean --onedir --console --name learnweb-bridge `
     --distpath $Out --workpath (Join-Path $work 'build') --specpath $work `
     --paths $Source `
     --collect-all keyring --copy-metadata keyring --hidden-import win32ctypes.core `

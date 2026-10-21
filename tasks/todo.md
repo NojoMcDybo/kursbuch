@@ -1,36 +1,36 @@
 # Aufgaben: Kursbuch zum Weitergeben (siehe plan.md)
 
 ## Phase A – Brücke mitliefern
-- [ ] **A1 Python (learnweb-mcp):** `LEARNWEB_HOME` bestimmt `ROOT` für `data/` und `sync_config.json`; Vorgabe `ziel` = `Dokumente\Kursbuch\LearnWeb`; `cli selftest`.
+- [x] **A1 Python (learnweb-mcp):** `LEARNWEB_HOME` bestimmt `ROOT` für `data/` und `sync_config.json`; Vorgabe `ziel` = `Dokumente\Kursbuch\LearnWeb`; `cli selftest`.
   - Kriterien: ohne `LEARNWEB_HOME` unverändert; mit Variable liegen alle Dateien dort; `selftest` meldet JSON `{ok, checks}`; Nojos `sync_config.json` bleibt gültig.
-  - Prüfen: `uv run pytest` grün (neue Tests), Aufruf mit Pfad mit Leerzeichen und Umlaut.
-- [ ] **A2 PyInstaller:** `tools/build-bridge.ps1`, `learnweb-bridge.spec` (onedir, collect keyring/certifi/lxml-Daten, ohne `mcp`); Rauchtest der `.exe`.
-  - Kriterien: `learnweb-bridge.exe selftest` ok; `status`, `config get`, `events`, `suggest`, `index`, `verzeichnis` laufen auf Testdaten; Größe genannt.
-- [ ] **A3 Rust:** `Paths.bridge`; Betriebsart (Entwickler/mitgeliefert); `py.rs` ruft die `.exe` mit `LEARNWEB_HOME`.
-  - Kriterien: Test: vorhandenes `learnweb-mcp` → Entwickler; sonst mitgeliefert; `settings.json` übersteuert; Passwort weiter nur per stdin.
-  - Prüfen: `cargo test`.
-- [ ] **A4 Tauri:** `bundle.resources` bringt `bridge/` in den Installer; Auflösung über `resource_dir`, `KURSBUCH_BRIDGE` für Tests.
-  - Kriterien: gebauter Installer enthält die Brücke; installierte App findet sie.
+  - Geprüft: `uv run pytest` 195 grün (u. a. Pfad `Jörg Müller\brücke`, neutrale Vorgabe); Commit 563d9a1.
+- [x] **A2 PyInstaller:** `tools/build-bridge.ps1` (kein `.spec`, alle Optionen im Skript; onedir, keyring/certifi/docx/pptx-Daten, ohne `mcp`); Rauchtest der `.exe`.
+  - Geprüft: `selftest` ok (Tresor, 121 Zertifikate, FTS5, Leser, Datenordner), `status`, `config get`, `events`, `suggest` laufen; 49 MB aus `bridge/`. `selftest --net` nicht belegt (LearnWeb war von hier nicht erreichbar).
+- [x] **A3 Rust:** `Paths.bridge`; Betriebsart (Entwickler/mitgeliefert); `py.rs` ruft die `.exe` mit `LEARNWEB_HOME`.
+  - Geprüft: `cargo test` 74 grün (Auswahl, direkter Aufruf, Passwort weiter nur per stdin).
+- [ ] **A4 Tauri:** `bundle.resources` bringt `bridge/` in den Installer (`tauri.bridge.conf.json`, nur Release); Auflösung über `resource_dir`, `KURSBUCH_BRIDGE` für Tests.
+  - Kriterien: gebauter Installer enthält die Brücke; installierte App findet sie. (Debug-Build ohne Bündel belegt: Ressource landet unter `target\debug\bridge`; Installer: Build läuft.)
 
 ### Checkpoint A
-- [ ] Python- und Rust-Tests grün · gefrorene Brücke besteht den Selbsttest · Nojos Entwickler-Modus unverändert (Test in der Test-Instanz)
+- [x] Python- und Rust-Tests grün · gefrorene Brücke besteht den Selbsttest · Nojos Entwickler-Modus unverändert (Test-Instanz ohne `uv`-Übersteuerung wählte „entwickler“ mit `~/learnweb-mcp`)
 
 ## Phase B – Erststart und Einstellungen
-- [ ] **B1 Rust:** `settings_get` (Ordner, Betriebsart, Datenordner), `settings_set_ziel`, `tauri-plugin-dialog` (Ordnerwahl), Capability nur Hauptfenster; `npm audit`.
-- [ ] **B2 Oberfläche:** Konto-Menü: Kursordner (anzeigen, öffnen, ändern), Hinweis zur Änderung; Fortschrittskarte nennt den Ordner.
-- [ ] **B3 Obsidian nur mit Tresor:** `course_view.note` nur mit `.obsidian` im Elternordner von `ziel`.
+- [x] **B1 Rust:** `settings_get` (Ordner, Betriebsart, Datenordner), `settings_set_ziel`, `tauri-plugin-dialog` (Ordnerwahl), Capability nur Hauptfenster; `npm audit` 0.
+- [x] **B2 Oberfläche:** Konto-Menü: Kursordner (anzeigen, öffnen, ändern); Fortschrittskarte nennt den Ordner.
+- [x] **B3 Obsidian nur mit Tresor:** `course_view.note` nur mit `.obsidian` im Elternordner von `ziel`; Knopf ausgegraut mit Hinweis.
 
 ### Checkpoint B
-- [ ] Test-Instanz im Modus „mitgeliefert“ (leeres Profil, Stub-Brücke oder gefrorene Brücke mit Testdaten): Anmeldeablauf, Einstellungen, Ordnerwechsel
+- [x] Test-Instanz im Modus „mitgeliefert“ (Stub-Brücke, `uv` per `settings.json` auf eine fehlende Datei gelegt): `settings_get` → mitgeliefert, Daten in `…\bridge\data`; Anmeldebild, Anmeldung (Passwort per stdin), Fortschrittskarte mit Ordner, Konto-Menü (Öffnen/Ändern), `settings_set_ziel` (gültig/ungültig), Notiz-Knopf ohne Tresor ausgegraut.
+  - Nicht geprüft: der Ordnerdialog selbst (native Fenster), mit der echten Brücke und echtem LearnWeb.
 
 ## Phase C – Weitergeben
-- [ ] **C1 Schnappschuss:** `tools/sync-bridge.ps1` kopiert bereinigt nach `bridge/` (Kennung → `abc123`, ohne Prompt-Dokument, Skripte, MCP-Server); Test sucht die Kennung.
-- [ ] **C2 Workflow:** `release.yml` baut die Brücke (Python 3.13, uv, PyInstaller) vor `tauri-action`.
-- [ ] **C3 Anleitung:** `docs/weitergeben.md` (Download, SmartScreen, Anmeldung, Datenschutz, Grenzen), README-Abschnitt; Lizenz nach Nojos Wahl.
+- [x] **C1 Schnappschuss:** `tools/sync-bridge.ps1` kopiert bereinigt nach `bridge/` (ohne `server.py`, Skripte, Prompt-Dokument; `mcp` aus pyproject und uv.lock; Kennung im Test → `abc123`); Prüfung auf Windows-Benutzer, Profilpfad und die angegebene Kennung; Tests im Schnappschuss 195 grün.
+- [x] **C2 Workflow:** `release.yml` baut die Brücke (uv, PyInstaller), prüft `selftest` und übergibt `tauri.bridge.conf.json` an `tauri build`. (Läuft erst beim Tag auf GitHub.)
+- [x] **C3 Anleitung:** `docs/weitergeben.md`, README-Abschnitte. Lizenz: wartet auf Nojos Wahl.
 
 ### Checkpoint C
 - [ ] Tag auf einem Testlauf des Workflows (oder lokal nachgestellt) liefert einen Installer mit Brücke
 
 ## Phase D – Abnahme
-- [ ] **D1 „Frischer Rechner“:** leeres `USERPROFILE`, `PATH` ohne `uv`, mitgelieferte Brücke: App startet, Anmeldebild, Brücke antwortet (Selbsttest), Ordner, kein Zugriff auf Nojos Daten.
-- [ ] **D2 Release und Gegenprobe:** neue Version, Installation bei Nojo (nach Freigabe), Entwickler-Modus erkennt `learnweb-mcp`, geplanter Sync und MCP-Server unberührt.
+- [x] **D1 „Frischer Rechner“:** Test-Instanz ohne uv, leere Konfiguration, mitgelieferte Brücke (Stub und echte `.exe` im Heimordner mit Leerzeichen/Umlaut). Kein Zugriff auf Nojos Daten (Daten unter `…\bridge`).
+- [ ] **D2 Release und Gegenprobe:** Version 0.4.0, Installation bei Nojo (nach Freigabe), Entwickler-Modus erkennt `learnweb-mcp`, geplanter Sync und MCP-Server unberührt; Tag (nach Freigabe).

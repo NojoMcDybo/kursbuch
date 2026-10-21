@@ -38,6 +38,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Bruecke bauen und pruefen
         run: |
+          Push-Location bridge; uv run --group dev pytest -q; $t = $LASTEXITCODE; Pop-Location
+          if ($t -ne 0) { throw 'Tests der Bruecke fehlgeschlagen' }
           ./tools/build-bridge.ps1
           $exe = 'bridge-dist/learnweb-bridge/learnweb-bridge.exe'
           if (-not (Test-Path $exe)) { throw "$exe fehlt" }
