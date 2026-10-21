@@ -254,7 +254,12 @@ async function main() {
   if (!cached) document.body.classList.add("locked");
   account = new Account({ onChange: () => { signature = ""; void refresh(); }, onStatus: loginState });
   q("#acct-host").replaceWith(account.el);
-  courses = new Courses({ onOpen: open, onRead: () => void refresh() });
+  courses = new Courses({
+    onOpen: open,
+    onRead: () => void refresh(),
+    // Kurse lassen sich auf Stundenplan-Eintraege ziehen (drag.ts); der Plan entsteht etwas spaeter, daher erst beim Aufruf nachsehen
+    drag: { over: (x, y, c) => tt.dropOver(x, y, c), rect: () => tt.dropRect(), assign: (c) => tt.dropAssign(c), clear: () => tt.dropClear(), scroller: () => tt.scroller },
+  });
   tl = new Timeline({ hueOf, nameOf, onOpen: open });
   abgaben = new Abgaben({ hueOf, nameOf, onOpen: open });
   tt = new Timetable({

@@ -46,6 +46,11 @@ trägt die Farben des Semesters und ruht, solange das Suchfenster offen ist.
   `timetable.json` im App-Ordner (eine unlesbare Datei wird als `.defekt` beiseitegelegt, nie überschrieben).
 - **Abgaben** (`abgaben.ts`, rechts, ohne Karte): Fristen und Prüfungen der nächsten zwei Wochen mit Restzeit (unter 48 Stunden
   bernsteinfarben, überfällig rot).
+- **Kurse per Ziehen zuordnen** (`drag.ts`): Eine Zeile der Kursliste lässt sich auf einen Eintrag im Stundenplan ziehen (z. B. nach einem
+  .ics-Import, wo die Einträge grau und ohne Kurs sind). Die Zeile hebt sich ab und folgt dem Zeiger als Karte in der Kursfarbe, Einträge
+  ohne Kurs pulsieren, der Eintrag darunter leuchtet in der Kursfarbe; beim Loslassen fliegt die Karte hinein, der Eintrag atmet auf und
+  nimmt die Farbe an („Rückgängig“ in der Meldung stellt nur diesen Eintrag zurück). Daneben federt die Karte zurück, Esc bricht ab, am
+  Rand des Plans blättert er. Ein Klick ohne Ziehen öffnet weiter den Kurs. Über das Formular (Kurs-Auswahl) geht es weiterhin mit der Tastatur.
 - **Automatische Erkennung** (`learnweb/schedule.py`, `schedule.rs`, `syncui.ts`): Nach der Anmeldung läuft der Abgleich von selbst (Fortschritt auf dem
   Anmeldebild, später der Knopf mit den zwei Pfeilen in der Leiste; beim Start gleicht Kursbuch ab, wenn der Stand älter als 20 Stunden ist).
   Kurse: `kurse_ab: "auto"` nimmt das vorige und das laufende Semester. Farben: jeder Kurs bekommt seinen Farbton selbst (`colors.rs`).

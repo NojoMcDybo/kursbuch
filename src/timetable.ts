@@ -165,15 +165,63 @@ Uhrzeit wählen`;
 
   private get entries(): Entry[] { return this.plans[this.sem] ?? []; }
 
-  private async save(list: Entry[]) {
+  private async save(list: Entry[]): Promise<boolean> {
     try {
       await api.timetableSave(this.sem, list);
       this.plans = { ...this.plans };
       if (list.length) this.plans[this.sem] = list; else delete this.plans[this.sem];
       this.draw();
+      return true;
     } catch (e) {
       toast(message(e));
+      return false;
     }
+  }
+
+  // ----------------------------------------------------------------- Kurse per Ziehen zuordnen (drag.ts)
+
+  private hover: HTMLElement | null = null;
+
+  get scroller() { return this.scroll; }
+
+  /** Eintrag unter dem Zeiger hervorheben (in der Farbe des gezogenen Kurses) */
+  dropOver(x: number, y: number, c: CourseCard) {
+    const b = document.elementFromPoint(x, y)?.closest<HTMLElement>(".tt-b") ?? null;
+    if (b !== this.hover) { this.hover?.classList.remove("drop"); this.hover = b; }
+    b?.style.setProperty("--dc", hsl(c.hue));
+    b?.classList.add("drop");
+    return !!b;
+  }
+
+  dropRect() { return this.hover?.isConnected ? this.hover.getBoundingClientRect() : null; }
+
+  dropClear() { this.hover?.classList.remove("drop"); this.hover = null; }
+
+  /** Der Eintrag unter dem Zeiger gehoert jetzt zu diesem Kurs; „Rückgängig“ stellt nur diesen Eintrag zurueck */
+  dropAssign(c: CourseCard) {
+    const id = this.hover?.dataset.id;
+    this.dropClear();
+    const e = this.entries.find((x) => x.id === id);
+    if (!e) return;
+    if (e.course === c.id) { this.pulse(e.id); return; }
+    const sem = this.sem, was = e.course ?? null;
+    void this.save(this.entries.map((x) => (x.id === e.id ? { ...x, course: c.id } : x))).then((ok) => {
+      if (!ok) return;
+      this.pulse(e.id);
+      toast(`„${e.title}“ gehört jetzt zu „${c.title}“.`, {
+        label: "Rückgängig",
+        run: () => { if (this.sem === sem) void this.save(this.entries.map((x) => (x.id === e.id ? { ...x, course: was } : x))).then(() => this.pulse(e.id)); },
+      });
+    });
+  }
+
+  /** Der Eintrag atmet einmal auf und nimmt seine neue Farbe an */
+  private pulse(id: string) {
+    const b = [...this.scroll.querySelectorAll<HTMLElement>(".tt-b")].find((x) => x.dataset.id === id);
+    if (!b) return;
+    b.classList.remove("assigned");
+    void b.offsetWidth; // Animation neu starten
+    b.classList.add("assigned");
   }
 
   // ----------------------------------------------------------------- Zeichnen
@@ -353,7 +401,8 @@ ${time}` : ""}`;
   }
 
   private block(e: Entry, from: number, hour: number, lane: number, lanes: number) {
-    const b = el("button", "tt-b");
+    const b = el("button", e.course == null ? "tt-b free" : "tt-b"); // „free“: noch ohne Kurs (beim Ziehen eines Kurses pulsiert er)
+    b.dataset.id = e.id;
     const c = this.o.card(e.course);
     b.style.setProperty("--c", c ? hsl(c.hue) : "rgba(200,205,215,.9)");
     b.style.top = `${((e.start - from) / 60) * hour + 1}px`;

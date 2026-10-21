@@ -4,12 +4,15 @@
  */
 
 import { api, type CourseCard, type NewItem, type Overview } from "./api";
+import { makeDraggable, type DropTarget } from "./drag";
 import { act, el, ico, iconBtn } from "./ui";
 
 export type CoursesOpts = {
   onOpen: (course: number) => void;
   /** „Neu“ wurde zurueckgesetzt: Stand neu holen */
   onRead: () => void;
+  /** Ziel fuers Ziehen einer Zeile (Stundenplan-Eintrag zuordnen) */
+  drag: DropTarget;
 };
 
 /** Das Semester, in dem heute liegt (Oktober-Maerz = WiSe, April-September = SoSe) */
@@ -78,11 +81,12 @@ export class Courses {
     const rows = list.map((c) => {
       const b = el("button", "cl-r");
       b.style.setProperty("--c", `hsl(${c.hue} 68% 62%)`);
-      b.title = [c.title, c.kind && { vorlesung: "Vorlesung", seminar: "Seminar", uebung: "Übung" }[c.kind], c.teacher].filter(Boolean).join("\n");
+      b.title = [c.title, c.kind && { vorlesung: "Vorlesung", seminar: "Seminar", uebung: "Übung" }[c.kind], c.teacher, "Auf einen Eintrag im Stundenplan ziehen, um ihn zuzuordnen"].filter(Boolean).join("\n");
       b.append(el("i", "cl-dot"), el("span", "cl-t", c.title));
       const n = this.newOf(c.id);
       if (n) { const badge = el("span", "cl-n", String(n)); badge.title = `${n} neu oder aktualisiert`; b.append(badge); }
       b.addEventListener("click", () => this.o.onOpen(c.id));
+      makeDraggable(b, c, this.o.drag);
       return b;
     });
     rows.forEach((r, i) => r.style.setProperty("--i", String(i)));
