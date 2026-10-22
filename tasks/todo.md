@@ -26,7 +26,7 @@
 ## Phase C – Weitergeben
 - [x] **C1 Schnappschuss:** `tools/sync-bridge.ps1` kopiert bereinigt nach `bridge/` (ohne `server.py`, Skripte, Prompt-Dokument; `mcp` aus pyproject und uv.lock; Kennung im Test → `abc123`); Prüfung auf Windows-Benutzer, Profilpfad und die angegebene Kennung; Tests im Schnappschuss 195 grün.
 - [x] **C2 Workflow:** `release.yml` baut die Brücke (uv, PyInstaller), prüft `selftest` und übergibt `tauri.bridge.conf.json` an `tauri build`. (Läuft erst beim Tag auf GitHub.)
-- [x] **C3 Anleitung:** `docs/weitergeben.md`, README-Abschnitte. Lizenz: wartet auf Nojos Wahl.
+- [x] **C3 Anleitung:** `docs/weitergeben.md`, README-Abschnitte. Lizenz: MIT (Nojo, 2026-10-22).
 
 ### Checkpoint C
 - [ ] Tag auf einem Testlauf des Workflows (oder lokal nachgestellt) liefert einen Installer mit Brücke

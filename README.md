@@ -167,6 +167,10 @@ Installer per Explorer starten (die Claude-App läuft virtualisiert); Installati
 Die Brücke in `bridge/` ist ein bereinigter Schnappschuss des Entwicklungsordners der Python-Seite: `tools\sync-bridge.ps1 -Source <Ordner> [-Kennung <Uni-Kennung>]`
 kopiert, ersetzt die Kennung im Test, prüft, dass keine persönlichen Angaben darin stehen, und lässt die Tests laufen. `bridge/` nicht von Hand ändern.
 
+## Lizenz
+
+MIT (siehe `LICENSE`). Kursbuch ist kein Angebot der Universität Münster und hat keine offizielle Schnittstelle zu LearnWeb.
+
 ## Entwickeln
 
 ```powershell
